@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Wonka Store</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="logo">Wonka Store</div>
+  <input id="q" placeholder="Cari kategori atau item" oninput="q=this.value;tab='home';render()">
+</header>
+<main id="main"></main>
+<nav>
+  <button data-t="home" onclick="go('home')"><span>🏠</span>Home</button>
+  <button data-t="transaksi" onclick="go('transaksi')"><span>🧾</span>Transaksi</button>
+  <button data-t="akun" onclick="go('akun')"><span>👤</span>Akun</button>
+</nav>
+<div id="modal" onclick="if(event.target==this)closeM()"><div class="sheet" id="sheet"></div></div>
+<div id="toast"></div>
+<script src="app.js"></script>
+</body>
+</html>
