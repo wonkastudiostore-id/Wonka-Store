@@ -2,7 +2,7 @@ const SB=supabase.createClient('https://ynchtzndogltyziitrqv.supabase.co','sb_pu
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rp=n=>'Rp'+Number(n||0).toLocaleString('id-ID');
-let me=null,prof=null,cats=[],prods=[],orders=[],tab='home',cat=null,q='';
+let me=null,prof=null,cats=[],prods=[],orders=[],banners=[],users=[],tab='home',cat=null,q='';
 
 function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',3000)}
 function modal(h){$('#sheet').innerHTML=h;$('#modal').classList.add('show')}
@@ -14,12 +14,13 @@ async function setUser(u){
   if(me){const{data}=await SB.from('profiles').select('*').eq('id',me.id).single();prof=data}
 }
 async function load(){
-  const[c,p]=await Promise.all([
+  const[c,p,b]=await Promise.all([
     SB.from('categories').select('*').order('name'),
-    SB.from('products').select('*').eq('active',true).order('sold_count',{ascending:false})
+    SB.from('products').select('*').eq('active',true).order('sold_count',{ascending:false}),
+    SB.from('banners').select('*').eq('active',true).order('sort').order('id')
   ]);
   if(c.error||p.error)toast('Gagal memuat data');
-  cats=c.data||[];prods=p.data||[];
+  cats=c.data||[];prods=p.data||[];banners=b.data||[];
 }
 async function init(){
   const{data:{session}}=await SB.auth.getSession();
@@ -31,29 +32,40 @@ async function render(){
 }
 
 const sec=(t,h)=>`<h4>${t}</h4>${h}`;
-const card=p=>`<div class="card" onclick="openP(${p.id})"><img src="${esc(p.image_url)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><div class="n">${esc(p.name)}</div><div class="pr">${rp(p.price)}</div><small>Terjual ${p.sold_count||0}</small></div>`;
+const kids=id=>cats.filter(c=>c.parent_id==id);
+const within=id=>[id,...kids(id).flatMap(c=>within(c.id))];
+const path=c=>c.parent_id?path(cats.find(x=>x.id==c.parent_id)||{name:'?'})+' › '+c.name:c.name;
+function disc(p){let d=p.discount_percent||0,c=cats.find(x=>x.id==p.category_id);while(c){d=Math.max(d,c.discount_percent||0);c=cats.find(x=>x.id==c.parent_id)}return d}
+const fp=p=>Math.round(p.price*(100-disc(p))/100);
+const priceH=p=>disc(p)?`<span class="pr">${rp(fp(p))}</span> <small style="display:inline"><s>${rp(p.price)}</s> −${disc(p)}%</small>`:`<span class="pr">${rp(p.price)}</span>`;
+const card=p=>`<div class="card" onclick="openP(${p.id})"><img src="${esc(p.image_url)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><div class="n">${esc(p.name)}</div><div>${priceH(p)}</div><small>Terjual ${p.sold_count||0}</small></div>`;
 const empty=t=>`<p class="mut">${t}</p>`;
 
+function bannerH(){
+  if(!banners.length)return `<div class="banner"><b>Tiket emas minggu ini</b><span>Diskon dan event terbaru tampil di sini.</span></div>`;
+  return `<div class="bn">${banners.map(b=>`<img src="${esc(b.image_url)}" alt="Banner promo">`).join('')}</div>`;
+}
 function home(){
-  const k=q.toLowerCase();
-  const list=prods.filter(p=>(!cat||p.category_id==cat)&&(!k||p.name.toLowerCase().includes(k)));
-  const cl=cats.filter(c=>!k||c.name.toLowerCase().includes(k));
-  let h=`<div class="banner"><b>Tiket emas minggu ini</b><span>Diskon dan event terbaru tampil di sini.</span></div>`;
-  if(cat||k)h+=sec(cat?'Item di '+esc(cats.find(c=>c.id==cat)?.name):'Hasil pencarian',`<div class="grid">${list.map(card).join('')||empty('Item tidak ditemukan.')}</div>`);
-  h+=sec('Top Seller',`<div class="scroll">${prods.slice(0,8).map(card).join('')||empty('Belum ada item. Seller bisa menambah item di tab Akun.')}</div>`);
-  h+=sec('Kategori',`<div class="cats">${cl.map(c=>`<button class="cat ${cat==c.id?'on':''}" onclick="cat=cat==${c.id}?null:${c.id};render()">${esc(c.name)}</button>`).join('')||empty('Belum ada kategori.')}</div>`);
+  const k=q.toLowerCase(),ids=cat?within(cat):null,cur=cats.find(c=>c.id==cat);
+  const list=prods.filter(p=>(!ids||ids.includes(p.category_id))&&(!k||p.name.toLowerCase().includes(k)));
+  const cl=k?cats.filter(c=>c.name.toLowerCase().includes(k)):kids(cat);
+  let h=bannerH();
+  if(cur)h+=`<button class="btn alt" onclick="cat=${cur.parent_id||'null'};render()">‹ Kembali dari ${esc(cur.name)}</button>`;
+  if(cat||k)h+=sec(cur?esc(cur.name):'Hasil pencarian',`<div class="grid">${list.map(card).join('')||empty('Item tidak ditemukan.')}</div>`);
+  else h+=sec('Top Seller',`<div class="scroll">${prods.slice(0,8).map(card).join('')||empty('Belum ada item. Seller bisa menambah item di tab Akun.')}</div>`);
+  h+=sec(cur?'Sub-kategori':'Kategori',`<div class="cats">${cl.map(c=>`<button class="cat" onclick="cat=${c.id};q='';$('#q').value='';render()">${esc(c.name)}${c.discount_percent?`<small>Diskon ${c.discount_percent}%</small>`:''}</button>`).join('')||empty(cur?'Tidak ada sub-kategori.':'Belum ada kategori.')}</div>`);
   return h;
 }
 
 function openP(id){
   const p=prods.find(x=>x.id==id);
-  modal(`<img src="${esc(p.image_url)}" alt="" onerror="this.remove()"><h3>${esc(p.name)}</h3><p class="pr">${rp(p.price)}</p><small>Stok ${p.stock}</small><button class="btn" onclick="buy(${p.id})">Beli sekarang</button>`+manage(p));
+  modal(`<img src="${esc(p.image_url)}" alt="" onerror="this.remove()"><h3>${esc(p.name)}</h3><p>${priceH(p)}</p><small>Stok ${p.stock}</small><button class="btn" onclick="buy(${p.id})">Beli sekarang</button>`+manage(p));
 }
 async function buy(id){
   if(!me){closeM();toast('Masuk dulu di tab Akun');return go('akun')}
   const p=prods.find(x=>x.id==id);
   if(p.stock<1)return toast('Stok habis');
-  const{data,error}=await SB.from('orders').insert({buyer_id:me.id,seller_id:p.seller_id,product_id:p.id,amount:p.price}).select().single();
+  const{data,error}=await SB.from('orders').insert({buyer_id:me.id,seller_id:p.seller_id,product_id:p.id,amount:fp(p)}).select().single();
   if(error)return toast(error.message);
   closeM();toast('Pesanan dibuat. Kode: '+data.code);go('transaksi');
 }
@@ -71,12 +83,19 @@ function openO(id){
 function copyC(c){navigator.clipboard.writeText(c).then(()=>toast('Kode disalin'),()=>toast('Tekan lama kode untuk menyalin'))}
 async function confirmO(id){
   const o=orders.find(x=>x.id==id);
-  const{data:s}=await SB.from('settings').select('value').eq('key','admin_fee_percent').single();
-  const fee=Math.round(o.amount*Number(s?.value||10)/100);
-  const{error}=await SB.from('orders').update({status:'paid',admin_fee:fee,seller_earning:o.amount-fee}).eq('id',id);
+  const{data:sp}=await SB.from('profiles').select('share_percent').eq('id',o.seller_id).single();
+  const earn=Math.round(o.amount*(sp?.share_percent??50)/100),fee=o.amount-earn;
+  const{error}=await SB.from('orders').update({status:'paid',admin_fee:fee,seller_earning:earn}).eq('id',id);
   if(error)return toast(error.message);
   await SB.from('products').update({sold_count:(o.products?.sold_count||0)+1}).eq('id',o.product_id);
-  closeM();await load();toast('Pembayaran dikonfirmasi');render();
+  if(o.seller_id)await coin(o.seller_id,earn,'Penjualan '+o.code);
+  await coin(me.id,fee,'Bagian admin '+o.code);
+  closeM();await load();await setUser(me);toast('Pembayaran dikonfirmasi');render();
+}
+async function coin(uid,n,note){
+  const{data:u}=await SB.from('profiles').select('coins').eq('id',uid).single();
+  await SB.from('profiles').update({coins:(u?.coins||0)+n}).eq('id',uid);
+  await SB.from('coin_log').insert({user_id:uid,change:n,note});
 }
 
 function auth(msg){
@@ -98,12 +117,12 @@ async function logout(){await SB.auth.signOut();await setUser(null);render()}
 async function akun(){
   if(!me)return auth();
   const r=prof?.role||'buyer';
-  let h=`<h3>${esc(prof?.name||'Pengguna')}</h3><small>${esc(me.email)} · peran ${esc(r)}</small><button class="btn alt" onclick="logout()">Keluar</button>`;
+  let h=`<h3>${esc(prof?.name||'Pengguna')}</h3><small>${esc(me.email)} · peran ${esc(r)}${r!='buyer'?' · koin '+rp(prof?.coins):''}</small><button class="btn alt" onclick="logout()">Keluar</button>`;
   if(r!='buyer')h+=seller()+mine();
   if(r=='admin')h+=await adm();
   return h;
 }
-const seller=()=>`<h4>Tambah kategori</h4><input id="cn" placeholder="Nama kategori, contoh Roblox"><button class="btn" onclick="addCat()">Tambah kategori</button><h4>Tambah item</h4><select id="pc">${cats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><input id="pn" placeholder="Nama item"><input id="pp" type="number" placeholder="Harga (Rp)"><input id="ps" type="number" placeholder="Stok"><input id="pf" type="file" accept="image/*" onchange="upImg(this,'pi')"><input id="pi" placeholder="Link gambar (terisi otomatis setelah pilih foto)"><button class="btn" onclick="addProd()">Simpan item</button>`;
+const seller=()=>`<h4>Tambah kategori</h4><input id="cn" placeholder="Nama kategori atau game"><select id="cp"><option value="">Kategori utama (tanpa induk)</option>${cats.map(c=>`<option value="${c.id}">Di dalam ${esc(path(c))}</option>`).join('')}</select><button class="btn" onclick="addCat()">Tambah kategori</button><h4>Tambah item</h4><select id="pc">${cats.map(c=>`<option value="${c.id}">${esc(path(c))}</option>`).join('')}</select><input id="pn" placeholder="Nama item"><input id="pp" type="number" placeholder="Harga (Rp)"><input id="ps" type="number" placeholder="Stok"><input id="pf" type="file" accept="image/*" onchange="upImg(this,'pi')"><input id="pi" placeholder="Link gambar (terisi otomatis setelah pilih foto)"><button class="btn" onclick="addProd()">Simpan item</button>`;
 async function upImg(el,target){
   const f=el.files[0];if(!f)return;
   if(f.size>5*1024*1024)return toast('Ukuran gambar maksimal 5 MB');
@@ -116,13 +135,14 @@ async function upImg(el,target){
   toast('Gambar terunggah. Lanjut simpan item.');
 }
 const RED='background:#b3261e;color:#fff';
-const manage=p=>(prof&&prof.role!='buyer'&&(prof.role=='admin'||p.seller_id==me?.id))?`<h4>Atur item</h4><input id="en" value="${esc(p.name)}" placeholder="Nama item"><input id="ep" type="number" value="${p.price}" placeholder="Harga"><input id="es" type="number" value="${p.stock}" placeholder="Stok"><button class="btn alt" onclick="editProd(${p.id})">Simpan perubahan</button><button class="btn" style="${RED}" onclick="delProd(${p.id})">Hapus item</button>`:'';
+const manage=p=>(prof&&prof.role!='buyer'&&(prof.role=='admin'||p.seller_id==me?.id))?`<h4>Atur item</h4><input id="en" value="${esc(p.name)}" placeholder="Nama item"><input id="ep" type="number" value="${p.price}" placeholder="Harga"><input id="es" type="number" value="${p.stock}" placeholder="Stok">${prof.role=='admin'?`<input id="ed" type="number" min="0" max="100" value="${p.discount_percent||0}" placeholder="Diskon item (%)">`:''}<button class="btn alt" onclick="editProd(${p.id})">Simpan perubahan</button><button class="btn" style="${RED}" onclick="delProd(${p.id})">Hapus item</button>`:'';
 const mine=()=>{
   const l=prods.filter(p=>p.seller_id==me.id);
   return `<h4>Item saya</h4>`+(l.map(p=>`<div class="row" onclick="openP(${p.id})"><img src="${esc(p.image_url)}" alt="" onerror="this.style.visibility='hidden'"><div style="flex:1"><b>${esc(p.name)}</b><small>${rp(p.price)} · stok ${p.stock}</small></div><button class="btn" style="width:auto;margin:0;padding:8px 12px;${RED}" onclick="event.stopPropagation();delProd(${p.id})">Hapus</button></div>`).join('')||empty('Belum ada item. Tambah lewat form di atas.'));
 };
 async function editProd(id){
   const row={name:$('#en').value.trim(),price:+$('#ep').value,stock:+$('#es').value};
+  if(prof.role=='admin'&&$('#ed'))row.discount_percent=Math.min(100,Math.max(0,+$('#ed').value||0));
   if(!row.name||!row.price)return toast('Isi nama dan harga');
   const{error}=await SB.from('products').update(row).eq('id',id);
   if(error)return toast(error.message);
@@ -136,7 +156,7 @@ async function delProd(id){
 }
 async function addCat(){
   const name=$('#cn').value.trim();if(!name)return toast('Isi nama kategori');
-  const{error}=await SB.from('categories').insert({name,created_by:me.id});
+  const{error}=await SB.from('categories').insert({name,created_by:me.id,parent_id:+$('#cp').value||null});
   if(error)return toast(error.message);
   await load();toast('Kategori ditambahkan');render();
 }
@@ -148,15 +168,72 @@ async function addProd(){
   await load();toast('Item ditambahkan');render();
 }
 async function adm(){
-  const[{data:u},{data:s}]=await Promise.all([SB.from('profiles').select('*'),SB.from('settings').select('value').eq('key','admin_fee_percent').single()]);
-  return `<h4>Bagi hasil admin</h4><small>Persen untuk sistem dari tiap transaksi.</small><input id="fee" type="number" value="${esc(s?.value||10)}"><button class="btn" onclick="saveFee()">Simpan persen</button><h4>Pengguna</h4>`+(u||[]).map(x=>`<div class="urow"><span>${esc(x.name||x.id.slice(0,8))}</span><select onchange="setRole('${x.id}',this.value)">${['buyer','seller','admin'].map(r=>`<option ${x.role==r?'selected':''}>${r}</option>`).join('')}</select></div>`).join('');
+  const[{data:u},{data:b}]=await Promise.all([SB.from('profiles').select('*').order('name'),SB.from('banners').select('*').order('sort').order('id')]);
+  users=u||[];
+  return `<h4>Banner promo</h4><input type="file" accept="image/*" onchange="addBanner(this)">`+(b||[]).map(x=>`<div class="row"><img src="${esc(x.image_url)}" alt=""><div style="flex:1"><small>Banner ${x.id}</small></div><button class="btn" style="width:auto;margin:0;padding:8px 12px;${RED}" onclick="delBanner(${x.id})">Hapus</button></div>`).join('')
+  +`<h4>Diskon kategori</h4><select id="dc">${cats.map(c=>`<option value="${c.id}">${esc(path(c))} (${c.discount_percent||0}%)</option>`).join('')}</select><input id="dp" type="number" min="0" max="100" placeholder="Diskon (%), isi 0 untuk menghapus"><button class="btn" onclick="setDisc()">Simpan diskon</button><small>Berlaku ke semua sub-kategori dan item di dalamnya. Diskon per item diatur dari popup item.</small>`
+  +`<h4>Pengguna</h4><input id="us" placeholder="Cari nama akun" oninput="drawUsers()"><div id="ul">${usersH()}</div>`;
 }
-async function saveFee(){
-  const{error}=await SB.from('settings').upsert({key:'admin_fee_percent',value:String(+$('#fee').value)});
-  toast(error?error.message:'Persen disimpan');
+const B2='width:auto;margin:0;padding:10px 12px';
+const usersH=()=>{const k=(document.getElementById('us')?.value||'').toLowerCase();return users.filter(u=>!k||(u.name||'').toLowerCase().includes(k)).map(u=>`<div class="uc"><div class="urow"><b>${esc(u.name||u.id.slice(0,8))}</b><select onchange="setRole('${u.id}',this.value)">${['buyer','seller','admin'].map(r=>`<option ${u.role==r?'selected':''}>${r}</option>`).join('')}</select></div>`+(u.role!='buyer'?`<small>Koin ${rp(u.coins)} · bagi hasil ${u.share_percent}%</small><div class="urow"><input id="sp${u.id}" type="number" min="0" max="100" value="${u.share_percent}"><button class="btn" style="${B2}" onclick="saveShare('${u.id}')">Simpan %</button></div><div class="urow"><input id="cc${u.id}" type="number" placeholder="Koin +/-"><button class="btn" style="${B2}" onclick="adjCoin('${u.id}')">Ubah koin</button></div>`:'')+(u.role=='seller'?`<button class="btn" style="${RED}" onclick="blockU('${u.id}')">Blok seller</button>`:'')+(u.blocked?`<small>Akun diblokir</small><button class="btn alt" onclick="unblockU('${u.id}')">Buka blokir</button>`:'')+`</div>`).join('')||empty('Akun tidak ditemukan.')};
+const drawUsers=()=>{document.getElementById('ul').innerHTML=usersH()};
+async function saveShare(id){
+  const v=Math.min(100,Math.max(0,+document.getElementById('sp'+id).value||0));
+  const{error}=await SB.from('profiles').update({share_percent:v}).eq('id',id);
+  if(error)return toast(error.message);
+  users.find(x=>x.id==id).share_percent=v;drawUsers();toast('Persen disimpan');
 }
+async function adjCoin(id){
+  const n=Math.trunc(+document.getElementById('cc'+id).value);
+  if(!n)return toast('Isi jumlah koin');
+  const u=users.find(x=>x.id==id);
+  if((u.coins||0)+n<0)return toast('Koin tidak cukup');
+  await coin(id,n,'Diubah admin');u.coins=(u.coins||0)+n;drawUsers();toast('Koin diubah');
+}
+async function blockU(id){
+  if(!confirm('Blok seller ini? Perannya jadi buyer.'))return;
+  const{error}=await SB.from('profiles').update({role:'buyer',blocked:true}).eq('id',id);
+  if(error)return toast(error.message);
+  toast('Seller diblokir');render();
+}
+async function unblockU(id){
+  const{error}=await SB.from('profiles').update({blocked:false}).eq('id',id);
+  if(error)return toast(error.message);
+  toast('Blokir dibuka');render();
+}
+async function addBanner(el){
+  const f=el.files[0];if(!f)return;
+  if(f.size>5*1024*1024)return toast('Ukuran gambar maksimal 5 MB');
+  toast('Mengunggah banner...');
+  const pt='banners/'+Date.now()+'.'+(f.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const{error}=await SB.storage.from('images').upload(pt,f,{contentType:f.type});
+  if(error)return toast(error.message);
+  const url=SB.storage.from('images').getPublicUrl(pt).data.publicUrl;
+  const r=await SB.from('banners').insert({image_url:url,sort:Date.now()%1000000});
+  if(r.error)return toast(r.error.message);
+  await load();toast('Banner ditambahkan');render();
+}
+async function delBanner(id){
+  if(!confirm('Hapus banner ini?'))return;
+  const{error}=await SB.from('banners').delete().eq('id',id);
+  if(error)return toast(error.message);
+  await load();toast('Banner dihapus');render();
+}
+async function setDisc(){
+  const v=Math.min(100,Math.max(0,+$('#dp').value||0));
+  const{error}=await SB.from('categories').update({discount_percent:v}).eq('id',+$('#dc').value);
+  if(error)return toast(error.message);
+  await load();toast('Diskon disimpan');render();
+}
+
 async function setRole(id,role){
-  const{error}=await SB.from('profiles').update({role}).eq('id',id);
+  const{error}=await SB.from('profiles').update({role,blocked:false}).eq('id',id);
   toast(error?error.message:'Peran diubah');
 }
+setInterval(()=>{
+  const e=$('.bn');
+  if(!e||banners.length<2||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const w=e.clientWidth,n=(Math.round(e.scrollLeft/w)+1)%banners.length;
+  e.scrollTo({left:n*w,behavior:'smooth'});
+},3000);
 init();

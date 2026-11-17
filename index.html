@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0f1a">
 <title>Wonka Store</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <link rel="stylesheet" href="style.css">
@@ -10,13 +11,16 @@
 <body>
 <header>
   <div class="logo">Wonka Store</div>
-  <input id="q" placeholder="Cari kategori atau item" oninput="q=this.value;tab='home';render()">
+  <div class="sbox">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6"/></svg>
+    <input id="q" placeholder="Cari kategori atau item" oninput="q=this.value;tab='home';render()">
+  </div>
 </header>
 <main id="main"></main>
 <nav>
-  <button data-t="home" onclick="go('home')"><span>🏠</span>Home</button>
-  <button data-t="transaksi" onclick="go('transaksi')"><span>🧾</span>Transaksi</button>
-  <button data-t="akun" onclick="go('akun')"><span>👤</span>Akun</button>
+  <button data-t="home" onclick="go('home')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l-2 0l9-9l9 9l-2 0"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/><path d="M9 21v-6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v6"/></svg>Home</button>
+  <button data-t="transaksi" onclick="go('transaksi')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21v-16a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-3-2l-2 2l-2-2l-2 2l-2-2l-3 2"/><path d="M14 8h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5"/><path d="M12 7v1m0 6v1"/></svg>Transaksi</button>
+  <button data-t="akun" onclick="go('akun')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg>Akun</button>
 </nav>
 <div id="modal" onclick="if(event.target==this)closeM()"><div class="sheet" id="sheet"></div></div>
 <div id="toast"></div>
