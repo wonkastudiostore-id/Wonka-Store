@@ -48,3 +48,4 @@ nav svg{display:block;width:22px;height:22px;margin:0 auto 2px;fill:none;stroke:
 .uc{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px;margin-bottom:8px}
 .uc input{margin:5px 8px 5px 0}
 #toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--vio);color:#fff;padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px;display:none;z-index:30;max-width:90%}
+label.btn{display:block;text-align:center;cursor:pointer}
