@@ -103,7 +103,18 @@ async function akun(){
   if(r=='admin')h+=await adm();
   return h;
 }
-const seller=()=>`<h4>Tambah kategori</h4><input id="cn" placeholder="Nama kategori, contoh Roblox"><button class="btn" onclick="addCat()">Tambah kategori</button><h4>Tambah item</h4><select id="pc">${cats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><input id="pn" placeholder="Nama item"><input id="pp" type="number" placeholder="Harga (Rp)"><input id="ps" type="number" placeholder="Stok"><input id="pi" placeholder="Link gambar (URL)"><button class="btn" onclick="addProd()">Simpan item</button>`;
+const seller=()=>`<h4>Tambah kategori</h4><input id="cn" placeholder="Nama kategori, contoh Roblox"><button class="btn" onclick="addCat()">Tambah kategori</button><h4>Tambah item</h4><select id="pc">${cats.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><input id="pn" placeholder="Nama item"><input id="pp" type="number" placeholder="Harga (Rp)"><input id="ps" type="number" placeholder="Stok"><input id="pf" type="file" accept="image/*" onchange="upImg(this,'pi')"><input id="pi" placeholder="Link gambar (terisi otomatis setelah pilih foto)"><button class="btn" onclick="addProd()">Simpan item</button>`;
+async function upImg(el,target){
+  const f=el.files[0];if(!f)return;
+  if(f.size>5*1024*1024)return toast('Ukuran gambar maksimal 5 MB');
+  toast('Mengunggah gambar...');
+  const ext=(f.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const path=me.id+'/'+Date.now()+'.'+ext;
+  const{error}=await SB.storage.from('images').upload(path,f,{contentType:f.type});
+  if(error)return toast(error.message);
+  $('#'+target).value=SB.storage.from('images').getPublicUrl(path).data.publicUrl;
+  toast('Gambar terunggah. Lanjut simpan item.');
+}
 async function addCat(){
   const name=$('#cn').value.trim();if(!name)return toast('Isi nama kategori');
   const{error}=await SB.from('categories').insert({name,created_by:me.id});
