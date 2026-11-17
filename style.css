@@ -49,3 +49,12 @@ nav svg{display:block;width:22px;height:22px;margin:0 auto 2px;fill:none;stroke:
 .uc input{margin:5px 8px 5px 0}
 #toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:var(--vio);color:#fff;padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px;display:none;z-index:30;max-width:90%}
 label.btn{display:block;text-align:center;cursor:pointer}
+.who{display:flex;gap:12px;align-items:center}
+.who.sel{margin:10px 0;padding:10px;background:var(--bg);border:1px solid var(--line);border-radius:12px}
+.av{width:44px;height:44px;border-radius:50%;object-fit:cover;background:var(--vio);display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto}
+.pw{position:relative}
+.pw input{padding-right:84px}
+.pw button{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--cy);padding:8px;font-size:13px}
+#msgs{max-height:48vh;overflow-y:auto;padding:8px 0;margin-bottom:6px}
+.msg{width:fit-content;max-width:80%;padding:8px 12px;border-radius:14px;margin:4px 0;background:var(--card);border:1px solid var(--line);overflow-wrap:anywhere}
+.msg.me{margin-left:auto;background:var(--vio);border-color:var(--vio)}
