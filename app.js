@@ -16,7 +16,7 @@ async function setUser(u){
 async function load(){
   const[c,p]=await Promise.all([
     SB.from('categories').select('*').order('name'),
-    SB.from('products').select('*').order('sold_count',{ascending:false})
+    SB.from('products').select('*').eq('active',true).order('sold_count',{ascending:false})
   ]);
   if(c.error||p.error)toast('Gagal memuat data');
   cats=c.data||[];prods=p.data||[];
@@ -47,7 +47,7 @@ function home(){
 
 function openP(id){
   const p=prods.find(x=>x.id==id);
-  modal(`<img src="${esc(p.image_url)}" alt="" onerror="this.remove()"><h3>${esc(p.name)}</h3><p class="pr">${rp(p.price)}</p><small>Stok ${p.stock}</small><button class="btn" onclick="buy(${p.id})">Beli sekarang</button>`);
+  modal(`<img src="${esc(p.image_url)}" alt="" onerror="this.remove()"><h3>${esc(p.name)}</h3><p class="pr">${rp(p.price)}</p><small>Stok ${p.stock}</small><button class="btn" onclick="buy(${p.id})">Beli sekarang</button>`+manage(p));
 }
 async function buy(id){
   if(!me){closeM();toast('Masuk dulu di tab Akun');return go('akun')}
@@ -99,7 +99,7 @@ async function akun(){
   if(!me)return auth();
   const r=prof?.role||'buyer';
   let h=`<h3>${esc(prof?.name||'Pengguna')}</h3><small>${esc(me.email)} · peran ${esc(r)}</small><button class="btn alt" onclick="logout()">Keluar</button>`;
-  if(r!='buyer')h+=seller();
+  if(r!='buyer')h+=seller()+mine();
   if(r=='admin')h+=await adm();
   return h;
 }
@@ -114,6 +114,25 @@ async function upImg(el,target){
   if(error)return toast(error.message);
   $('#'+target).value=SB.storage.from('images').getPublicUrl(path).data.publicUrl;
   toast('Gambar terunggah. Lanjut simpan item.');
+}
+const RED='background:#b3261e;color:#fff';
+const manage=p=>(prof&&prof.role!='buyer'&&(prof.role=='admin'||p.seller_id==me?.id))?`<h4>Atur item</h4><input id="en" value="${esc(p.name)}" placeholder="Nama item"><input id="ep" type="number" value="${p.price}" placeholder="Harga"><input id="es" type="number" value="${p.stock}" placeholder="Stok"><button class="btn alt" onclick="editProd(${p.id})">Simpan perubahan</button><button class="btn" style="${RED}" onclick="delProd(${p.id})">Hapus item</button>`:'';
+const mine=()=>{
+  const l=prods.filter(p=>p.seller_id==me.id);
+  return `<h4>Item saya</h4>`+(l.map(p=>`<div class="row" onclick="openP(${p.id})"><img src="${esc(p.image_url)}" alt="" onerror="this.style.visibility='hidden'"><div style="flex:1"><b>${esc(p.name)}</b><small>${rp(p.price)} · stok ${p.stock}</small></div><button class="btn" style="width:auto;margin:0;padding:8px 12px;${RED}" onclick="event.stopPropagation();delProd(${p.id})">Hapus</button></div>`).join('')||empty('Belum ada item. Tambah lewat form di atas.'));
+};
+async function editProd(id){
+  const row={name:$('#en').value.trim(),price:+$('#ep').value,stock:+$('#es').value};
+  if(!row.name||!row.price)return toast('Isi nama dan harga');
+  const{error}=await SB.from('products').update(row).eq('id',id);
+  if(error)return toast(error.message);
+  closeM();await load();toast('Item diperbarui');render();
+}
+async function delProd(id){
+  if(!confirm('Hapus item ini? Riwayat transaksi tetap tersimpan.'))return;
+  const{error}=await SB.from('products').update({active:false}).eq('id',id);
+  if(error)return toast(error.message);
+  closeM();await load();toast('Item dihapus');render();
 }
 async function addCat(){
   const name=$('#cn').value.trim();if(!name)return toast('Isi nama kategori');
