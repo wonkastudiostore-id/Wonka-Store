@@ -70,7 +70,7 @@ async function buy(id){
   if(p.stock<1)return toast('Stok habis');
   const{data,error}=await SB.from('orders').insert({buyer_id:me.id,seller_id:p.seller_id,product_id:p.id,amount:fp(p)}).select().single();
   if(error)return toast(error.message);
-  closeM();toast('Pesanan dibuat. Kode: '+data.code);go('transaksi');
+  closeM();toast('Pesanan dibuat');go('transaksi');
 }
 
 async function trx(){
@@ -81,9 +81,8 @@ async function trx(){
 }
 function openO(id){
   const o=orders.find(x=>x.id==id);
-  modal(`<h3>Detail transaksi</h3><p>${esc(o.products?.name)}</p><p class="pr">${rp(o.amount)}</p><small>Status ${esc(o.status)} · ${new Date(o.created_at).toLocaleString('id-ID')}</small><div class="code">${esc(o.code)}</div><small>Salin kode ini dan kirim ke seller untuk verifikasi.</small><button class="btn" onclick="copyC('${esc(o.code)}')">Salin kode</button>`+(prof?.role=='admin'&&o.status=='pending'?`<button class="btn alt" onclick="confirmO(${o.id})">Konfirmasi pembayaran</button>`:''));
+  modal(`<h3>Detail transaksi</h3><p>${esc(o.products?.name)}</p><p class="pr">${rp(o.amount)}</p><small>Status ${esc(o.status)} · ${new Date(o.created_at).toLocaleString('id-ID')}</small>`+(prof?.role=='admin'&&o.status=='pending'?`<button class="btn alt" onclick="confirmO(${o.id})">Konfirmasi pembayaran</button>`:''));
 }
-function copyC(c){navigator.clipboard.writeText(c).then(()=>toast('Kode disalin'),()=>toast('Tekan lama kode untuk menyalin'))}
 async function confirmO(id){
   const o=orders.find(x=>x.id==id);
   const{data:sp}=await SB.from('profiles').select('share_percent').eq('id',o.seller_id).single();
