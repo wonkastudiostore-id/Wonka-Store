@@ -97,14 +97,8 @@ async function setSt(id,st){
   toast('Status diperbarui');render();
 }
 async function confirmO(id){
-  const o=orders.find(x=>x.id==id);
-  const{data:sp}=await SB.from('profiles').select('share_percent').eq('id',o.seller_id).single();
-  const earn=Math.round(o.amount*(sp?.share_percent??50)/100),fee=o.amount-earn;
-  const{error}=await SB.from('orders').update({status:'paid',admin_fee:fee,seller_earning:earn}).eq('id',id);
+  const{error}=await SB.rpc('confirm_order',{oid:id});
   if(error)return toast(error.message);
-  await SB.from('products').update({sold_count:(o.products?.sold_count||0)+1}).eq('id',o.product_id);
-  if(o.seller_id)await coin(o.seller_id,earn,'Penjualan '+o.code);
-  await coin(me.id,fee,'Bagian admin '+o.code);
   closeM();await load();await setUser(me);toast('Pembayaran dikonfirmasi');render();
 }
 async function coin(uid,n,note){
