@@ -5,7 +5,7 @@ const rp=n=>'Rp'+Number(n||0).toLocaleString('id-ID');
 let me=null,prof=null,cats=[],prods=[],orders=[],sellers={},uinfo={},authMode=null,chatTo=null,chatT=null,banners=[],users=[],tab='home',cat=null,q='';
 
 function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',3000)}
-function modal(h){$('#sheet').innerHTML=h;$('#modal').classList.add('show')}
+function modal(h){$('#sheet').innerHTML='<button class="x" onclick="closeM()" aria-label="Tutup">×</button>'+h;$('#modal').classList.add('show')}
 function closeM(){$('#modal').classList.remove('show')}
 function go(t){tab=t;render();scrollTo(0,0)}
 
@@ -29,7 +29,7 @@ async function init(){
   await setUser(session?.user);await load();render();
 }
 async function render(){
-  clearInterval(chatT);
+  clearInterval(chatT);closeM();
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==tab));
   $('#main').innerHTML=await({home,chat:chatV,transaksi:trx,akun}[tab])();
 }
@@ -56,7 +56,7 @@ function home(){
   if(cur)h+=`<button class="btn alt" onclick="cat=${cur.parent_id||'null'};render()">‹ Kembali dari ${esc(cur.name)}</button>`;
   if(cat||k)h+=sec(cur?esc(cur.name):'Hasil pencarian',`<div class="grid">${list.map(card).join('')||empty('Item tidak ditemukan.')}</div>`);
   else h+=sec('Top Seller',`<div class="scroll">${prods.slice(0,8).map(card).join('')||empty('Belum ada item. Seller bisa menambah item di tab Akun.')}</div>`);
-  h+=sec(cur?'Sub-kategori':'Kategori',`<div class="cats">${cl.map(c=>`<button class="cat" onclick="cat=${c.id};q='';$('#q').value='';render()">${esc(c.name)}${c.discount_percent?`<small>Diskon ${c.discount_percent}%</small>`:''}</button>`).join('')||empty(cur?'Tidak ada sub-kategori.':'Belum ada kategori.')}</div>`);
+  h+=sec(cur?'Sub-kategori':'Kategori',`<div class="cats">${cl.map(c=>`<button class="cat" onclick="cat=${c.id};q='';$('#q').value='';render()">${c.image_url?`<img src="${esc(c.image_url)}" alt="" loading="lazy">`:''}${esc(c.name)}${c.discount_percent?`<small>Diskon ${c.discount_percent}%</small>`:''}</button>`).join('')||empty(cur?'Tidak ada sub-kategori.':'Belum ada kategori.')}</div>`);
   return h;
 }
 
@@ -73,15 +73,28 @@ async function buy(id){
   closeM();toast('Pesanan dibuat');go('transaksi');
 }
 
+const ST={pending:'Menunggu pembayaran',paid:'Menunggu dikirim',shipped:'Sudah terkirim',done:'Selesai'};
+let tf='all';
 async function trx(){
   if(!me)return auth('Masuk untuk melihat transaksi.');
   const{data}=await SB.from('orders').select('*,products(name,image_url,sold_count)').order('created_at',{ascending:false});
   orders=data||[];
-  return `<h3>Riwayat transaksi</h3><br>`+(orders.map(o=>`<div class="row" onclick="openO(${o.id})"><img src="${esc(o.products?.image_url)}" alt="" onerror="this.style.visibility='hidden'"><div><b>${esc(o.products?.name)}</b><small>${rp(o.amount)} · ${esc(o.status)} · ${o.buyer_id==me.id?'Beli':'Jual'}</small></div></div>`).join('')||empty('Belum ada transaksi.'));
+  const l=orders.filter(o=>tf=='all'||o.status==tf);
+  const chips=[['all','Semua'],...Object.entries(ST)].map(([k,v])=>`<button class="chip ${tf==k?'on':''}" onclick="tf='${k}';render()">${v}</button>`).join('');
+  return `<div class="chips">${chips}</div>`+(l.map(o=>`<div class="row" onclick="openO(${o.id})"><img src="${esc(o.products?.image_url)}" alt="" onerror="this.style.visibility='hidden'"><div><b>${esc(o.products?.name||'Item dihapus')}</b><small>${rp(o.amount)} · ${ST[o.status]||esc(o.status)} · ${o.buyer_id==me.id?'Beli':'Jual'}</small></div></div>`).join('')||empty('Belum ada transaksi di status ini.'));
 }
 function openO(id){
-  const o=orders.find(x=>x.id==id);
-  modal(`<h3>Detail transaksi</h3><p>${esc(o.products?.name)}</p><p class="pr">${rp(o.amount)}</p><small>Status ${esc(o.status)} · ${new Date(o.created_at).toLocaleString('id-ID')}</small>`+(prof?.role=='admin'&&o.status=='pending'?`<button class="btn alt" onclick="confirmO(${o.id})">Konfirmasi pembayaran</button>`:''));
+  const o=orders.find(x=>x.id==id),ad=prof?.role=='admin';
+  let b='';
+  if(ad&&o.status=='pending')b+=`<button class="btn alt" onclick="confirmO(${o.id})">Konfirmasi pembayaran</button>`;
+  if((o.seller_id==me.id||ad)&&o.status=='paid')b+=`<button class="btn" onclick="setSt(${o.id},'shipped')">Tandai sudah dikirim</button>`;
+  if((o.buyer_id==me.id||ad)&&o.status=='shipped')b+=`<button class="btn" onclick="setSt(${o.id},'done')">Pesanan diterima</button>`;
+  modal(`<h3>Detail transaksi</h3><p>${esc(o.products?.name||'Item dihapus')}</p><p class="pr">${rp(o.amount)}</p><small>${ST[o.status]||esc(o.status)} · ${new Date(o.created_at).toLocaleString('id-ID')}</small>`+b);
+}
+async function setSt(id,st){
+  const{error}=await SB.from('orders').update({status:st}).eq('id',id);
+  if(error)return toast(error.message);
+  toast('Status diperbarui');render();
 }
 async function confirmO(id){
   const o=orders.find(x=>x.id==id);
@@ -140,15 +153,29 @@ async function upAvatar(el){
   if(r.error)return toast(r.error.message);
   await setUser(me);toast('Foto profil diperbarui');render();
 }
+const tile=(k,t,d)=>`<button class="tile" onclick="openBox('${k}')"><b>${t}</b><small>${d}</small></button>`;
+const PEN='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.828 2.828 0 1 0-4-4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg>';
+function editName(){modal(`<h3>Ubah nama</h3><input id="pnm" value="${esc(prof?.name||'')}" placeholder="Nama"><button class="btn" onclick="saveName()">Simpan</button>`)}
+function chatAdmin(){
+  const a=Object.values(sellers).find(x=>x.role=='admin');
+  if(!a)return toast('Admin belum tersedia');
+  chatTo={b:me.id,s:a.id};go('chat');
+}
+async function openBox(k){
+  const f={cat:catForm,item:itemForm,mine,disc:discBox,cats:catsBox,banner:bannerBox,users:usersBox}[k];
+  modal(await f());
+}
 async function akun(){
   if(!me)return auth();
   const r=prof?.role||'buyer';
-  let h=`<div class="who">${av(prof)}<div><h3>${esc(prof?.name||'Pengguna')}</h3><small>${esc(me.email)} · peran ${esc(r)}${r!='buyer'?' · koin '+rp(prof?.coins):''}</small></div></div><h4>Profil</h4><input id="pnm" value="${esc(prof?.name||'')}" placeholder="Nama"><button class="btn" onclick="saveName()">Simpan nama</button><label class="btn alt">Ganti foto profil<input type="file" accept="image/*" onchange="upAvatar(this)" hidden></label><button class="btn alt" onclick="logout()">Keluar</button>`;
-  if(r!='buyer')h+=seller()+mine();
-  if(r=='admin')h+=await adm();
+  let h=`<div class="who"><label class="avl" aria-label="Ganti foto profil">${av(prof)}<input type="file" accept="image/*" onchange="upAvatar(this)" hidden></label><div><div class="nm"><h3>${esc(prof?.name||'Pengguna')}</h3><button class="ic" onclick="editName()" aria-label="Ubah nama">${PEN}</button></div><small>${esc(me.email)} · ${esc(r)}</small></div></div>`;
+  if(r!='buyer')h+=`<div class="wallet"><small>Dompetku</small><b>${rp(prof?.coins)}</b></div><h4>Penjualan</h4><div class="tiles">${tile('cat','Tambah kategori','Buat kategori baru')}${tile('item','Tambah item','Jual item baru')}${tile('mine','Item saya','Ubah atau hapus')}</div>`;
+  if(r=='admin')h+=`<h4>Admin</h4><div class="tiles">${tile('cats','Kategori','Ubah dan hapus')}${tile('banner','Banner','Promo di beranda')}${tile('disc','Diskon','Per kategori')}${tile('users','Pengguna','Peran, koin, akun')}</div>`;
+  h+=`<h4>Bantuan</h4>`+(r!='admin'?`<div class="row" onclick="chatAdmin()"><div><b>Chat admin</b><small>Tanya atau laporkan masalah</small></div></div>`:'')+`<button class="btn alt" onclick="logout()">Keluar</button>`;
   return h;
 }
-const seller=()=>`<h4>Tambah kategori</h4><input id="cn" placeholder="Nama kategori atau game"><select id="cp"><option value="">Kategori utama (tanpa induk)</option>${cats.map(c=>`<option value="${c.id}">Di dalam ${esc(path(c))}</option>`).join('')}</select><button class="btn" onclick="addCat()">Tambah kategori</button><h4>Tambah item</h4><select id="pc">${cats.map(c=>`<option value="${c.id}">${esc(path(c))}</option>`).join('')}</select><input id="pn" placeholder="Nama item"><input id="pd" placeholder="Deskripsi item"><input id="pp" type="number" placeholder="Harga (Rp)"><input id="ps" type="number" placeholder="Stok"><label class="btn alt">Pilih foto dari galeri<input id="pf" type="file" accept="image/*" onchange="upImg(this,'pi')" hidden></label><input id="pi" placeholder="Link gambar (terisi otomatis setelah pilih foto)"><button class="btn" onclick="addProd()">Simpan item</button>`;
+const catForm=()=>`<h3>Tambah kategori</h3><input id="cn" placeholder="Nama kategori atau game"><select id="cp"><option value="">Kategori utama (tanpa induk)</option>${cats.map(c=>`<option value="${c.id}">Di dalam ${esc(path(c))}</option>`).join('')}</select><label class="btn alt">Pilih gambar kategori<input type="file" accept="image/*" onchange="upImg(this,'ci')" hidden></label><input id="ci" placeholder="Link gambar (terisi otomatis)"><button class="btn" onclick="addCat()">Tambah kategori</button>`;
+const itemForm=()=>`<h3>Tambah item</h3><select id="pc">${cats.map(c=>`<option value="${c.id}">${esc(path(c))}</option>`).join('')}</select><input id="pn" placeholder="Nama item"><input id="pd" placeholder="Deskripsi item"><input id="pp" type="number" placeholder="Harga (Rp)"><input id="ps" type="number" placeholder="Stok"><label class="btn alt">Pilih foto dari galeri<input id="pf" type="file" accept="image/*" onchange="upImg(this,'pi')" hidden></label><input id="pi" placeholder="Link gambar (terisi otomatis)"><button class="btn" onclick="addProd()">Simpan item</button>`;
 async function upImg(el,target){
   const f=el.files[0];if(!f)return;
   if(f.size>5*1024*1024)return toast('Ukuran gambar maksimal 5 MB');
@@ -182,7 +209,7 @@ async function delProd(id){
 }
 async function addCat(){
   const name=$('#cn').value.trim();if(!name)return toast('Isi nama kategori');
-  const{error}=await SB.from('categories').insert({name,created_by:me.id,parent_id:+$('#cp').value||null});
+  const{error}=await SB.from('categories').insert({name,created_by:me.id,parent_id:+$('#cp').value||null,image_url:$('#ci').value.trim()||null});
   if(error)return toast(error.message);
   await load();toast('Kategori ditambahkan');render();
 }
@@ -193,15 +220,29 @@ async function addProd(){
   if(error)return toast(error.message);
   await load();toast('Item ditambahkan');render();
 }
-async function adm(){
-  const[{data:u},{data:b}]=await Promise.all([SB.from('profiles').select('*').order('name'),SB.from('banners').select('*').order('sort').order('id')]);
-  users=u||[];
-  return `<h4>Banner promo</h4><label class="btn alt">Upload banner<input type="file" accept="image/*" onchange="addBanner(this)" hidden></label>`+(b||[]).map(x=>`<div class="row"><img src="${esc(x.image_url)}" alt=""><div style="flex:1"><small>Banner ${x.id}</small></div><button class="btn" style="width:auto;margin:0;padding:8px 12px;${RED}" onclick="delBanner(${x.id})">Hapus</button></div>`).join('')
-  +`<h4>Diskon kategori</h4><select id="dc">${cats.map(c=>`<option value="${c.id}">${esc(path(c))} (${c.discount_percent||0}%)</option>`).join('')}</select><input id="dp" type="number" min="0" max="100" placeholder="Diskon (%), isi 0 untuk menghapus"><button class="btn" onclick="setDisc()">Simpan diskon</button><small>Berlaku ke semua sub-kategori dan item di dalamnya. Diskon per item diatur dari popup item.</small>`
-  +`<h4>Pengguna</h4><input id="us" placeholder="Cari nama akun" oninput="drawUsers()"><div id="ul">${usersH()}</div>`;
+const discBox=()=>`<h3>Diskon kategori</h3><select id="dc">${cats.map(c=>`<option value="${c.id}">${esc(path(c))} (${c.discount_percent||0}%)</option>`).join('')}</select><input id="dp" type="number" min="0" max="100" placeholder="Diskon (%), isi 0 untuk menghapus"><button class="btn" onclick="setDisc()">Simpan diskon</button><small>Berlaku ke semua sub-kategori dan item di dalamnya. Diskon per item diatur dari popup item.</small>`;
+const catsBox=()=>`<h3>Kelola kategori</h3>`+(cats.map(c=>`<div class="uc"><input id="cnm${c.id}" value="${esc(c.name)}" placeholder="Nama"><label class="btn alt">Ganti gambar<input type="file" accept="image/*" onchange="upImg(this,'cim${c.id}')" hidden></label><input id="cim${c.id}" value="${esc(c.image_url||'')}" placeholder="Link gambar"><div class="urow"><button class="btn" style="${B2}" onclick="saveCat(${c.id})">Simpan</button><button class="btn" style="${B2};${RED}" onclick="delCat(${c.id})">Hapus</button></div></div>`).join('')||empty('Belum ada kategori.'));
+async function bannerBox(){
+  const{data:b}=await SB.from('banners').select('*').order('sort').order('id');
+  return `<h3>Banner promo</h3><label class="btn alt">Upload banner<input type="file" accept="image/*" onchange="addBanner(this)" hidden></label>`+(b||[]).map(x=>`<div class="row"><img src="${esc(x.image_url)}" alt=""><div style="flex:1"><small>Banner ${x.id}</small></div><button class="btn" style="width:auto;margin:0;padding:8px 12px;${RED}" onclick="delBanner(${x.id})">Hapus</button></div>`).join('');
+}
+async function usersBox(){
+  const{data:u}=await SB.from('profiles').select('*').order('name');users=u||[];
+  return `<h3>Pengguna</h3><input id="us" placeholder="Cari nama akun" oninput="drawUsers()"><div id="ul">${usersH()}</div>`;
+}
+async function saveCat(id){
+  const{error}=await SB.from('categories').update({name:document.getElementById('cnm'+id).value.trim(),image_url:document.getElementById('cim'+id).value.trim()||null}).eq('id',id);
+  if(error)return toast(error.message);
+  await load();toast('Kategori disimpan');render();
+}
+async function delCat(id){
+  if(!confirm('Hapus kategori ini beserta sub-kategorinya?'))return;
+  const{error}=await SB.from('categories').delete().eq('id',id);
+  if(error)return toast(error.code=='23503'?'Kategori masih berisi item. Hapus atau pindahkan item dulu.':error.message);
+  await load();toast('Kategori dihapus');render();
 }
 const B2='width:auto;margin:0;padding:10px 12px';
-const usersH=()=>{const k=(document.getElementById('us')?.value||'').toLowerCase();return users.filter(u=>!k||(u.name||'').toLowerCase().includes(k)).map(u=>`<div class="uc"><div class="urow"><b>${esc(u.name||u.id.slice(0,8))}</b><select onchange="setRole('${u.id}',this.value)">${['buyer','seller','admin'].map(r=>`<option ${u.role==r?'selected':''}>${r}</option>`).join('')}</select></div>`+(u.role!='buyer'?`<small>Koin ${rp(u.coins)} · bagi hasil ${u.share_percent}%</small><div class="urow"><input id="sp${u.id}" type="number" min="0" max="100" value="${u.share_percent}"><button class="btn" style="${B2}" onclick="saveShare('${u.id}')">Simpan %</button></div><div class="urow"><input id="cc${u.id}" type="number" min="1" placeholder="Jumlah koin"></div><div class="urow"><button class="btn" style="${B2}" onclick="adjCoin('${u.id}',1)">Tambah</button><button class="btn alt" style="${B2}" onclick="adjCoin('${u.id}',-1)">Kurangi</button></div>`:'')+(u.role=='seller'?`<button class="btn" style="${RED}" onclick="blockU('${u.id}')">Blok seller</button>`:'')+(u.blocked?`<small>Akun diblokir</small><button class="btn alt" onclick="unblockU('${u.id}')">Buka blokir</button>`:'')+(u.id!=me.id?`<button class="btn" style="${RED}" onclick="delUser('${u.id}')">Hapus akun permanen</button>`:'')+`</div>`).join('')||empty('Akun tidak ditemukan.')};
+const usersH=()=>{const k=(document.getElementById('us')?.value||'').toLowerCase();return users.filter(u=>!k||(u.name||'').toLowerCase().includes(k)).map(u=>`<div class="uc"><div class="urow"><b>${esc(u.name||u.id.slice(0,8))}</b>${u.role=='admin'?'<small>Admin</small>':`<select onchange="setRole('${u.id}',this.value)">${['buyer','seller'].map(r=>`<option ${u.role==r?'selected':''}>${r}</option>`).join('')}</select>`}</div>`+(u.role!='buyer'?`<small>Koin ${rp(u.coins)} · bagi hasil ${u.share_percent}%</small><div class="urow"><input id="sp${u.id}" type="number" min="0" max="100" value="${u.share_percent}"><button class="btn" style="${B2}" onclick="saveShare('${u.id}')">Simpan %</button></div><div class="urow"><input id="cc${u.id}" type="number" min="1" placeholder="Jumlah koin"></div><div class="urow"><button class="btn" style="${B2}" onclick="adjCoin('${u.id}',1)">Tambah</button><button class="btn alt" style="${B2}" onclick="adjCoin('${u.id}',-1)">Kurangi</button></div>`:'')+(u.role=='seller'?`<button class="btn" style="${RED}" onclick="blockU('${u.id}')">Blok seller</button>`:'')+(u.blocked?`<small>Akun diblokir</small><button class="btn alt" onclick="unblockU('${u.id}')">Buka blokir</button>`:'')+(u.id!=me.id?`<button class="btn" style="${RED}" onclick="delUser('${u.id}')">Hapus akun permanen</button>`:'')+`</div>`).join('')||empty('Akun tidak ditemukan.')};
 const drawUsers=()=>{document.getElementById('ul').innerHTML=usersH()};
 async function saveShare(id){
   const v=Math.min(100,Math.max(0,+document.getElementById('sp'+id).value||0));

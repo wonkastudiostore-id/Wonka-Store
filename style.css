@@ -58,3 +58,19 @@ label.btn{display:block;text-align:center;cursor:pointer}
 #msgs{max-height:48vh;overflow-y:auto;padding:8px 0;margin-bottom:6px}
 .msg{width:fit-content;max-width:80%;padding:8px 12px;border-radius:14px;margin:4px 0;background:var(--card);border:1px solid var(--line);overflow-wrap:anywhere}
 .msg.me{margin-left:auto;background:var(--vio);border-color:var(--vio)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;scrollbar-width:none}
+.chip{flex:0 0 auto;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--mut);font-size:13px}
+.chip.on{color:var(--cy);border-color:var(--cy)}
+.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tile{text-align:left;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;color:var(--ink);font-size:15px}
+.tile b{display:block;margin-bottom:2px;font-weight:600}
+.wallet{margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+.wallet b{display:block;font-size:24px;color:var(--cy)}
+.nm{display:flex;align-items:center;gap:6px}
+.ic{background:none;border:0;color:var(--cy);padding:6px;line-height:0}
+.ic svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.avl{cursor:pointer;display:block}
+.sheet{position:relative}
+.sheet h3{padding-right:36px}
+.x{position:absolute;top:8px;right:10px;background:none;border:0;color:var(--mut);font-size:28px;line-height:1;padding:6px 10px}
+.cat img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:10px;margin-bottom:8px;display:block}
