@@ -40,7 +40,7 @@ const sec=(t,h)=>`<h4>${t}</h4>${h}`;
 const kids=id=>cats.filter(c=>c.parent_id==id);
 const within=id=>[id,...kids(id).flatMap(c=>within(c.id))];
 const path=c=>c.parent_id?path(cats.find(x=>x.id==c.parent_id)||{name:'?'})+' › '+c.name:c.name;
-function disc(p){let d=p.discount_percent||0,c=cats.find(x=>x.id==p.category_id);while(c){d=Math.max(d,c.discount_percent||0);c=cats.find(x=>x.id==c.parent_id)}return d}
+function disc(p){return p.discount_percent||0}
 const fp=p=>Math.round(p.price*(100-disc(p))/100);
 const priceH=p=>disc(p)?`<span class="pr">${rp(fp(p))}</span> <small style="display:inline"><s>${rp(p.price)}</s> −${disc(p)}%</small>`:`<span class="pr">${rp(p.price)}</span>`;
 const card=p=>`<div class="card" onclick="openP(${p.id})"><img src="${esc(p.image_url)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><div class="n">${esc(p.name)}</div><div>${priceH(p)}</div><small>Terjual ${p.sold_count||0}</small></div>`;
@@ -58,7 +58,7 @@ function home(){
   if(cur)h+=`<button class="btn alt" onclick="cat=${cur.parent_id||'null'};render()">‹ Kembali dari ${esc(cur.name)}</button>`;
   if(cat||k)h+=sec(cur?esc(cur.name):'Hasil pencarian',`<div class="grid">${list.map(card).join('')||empty('Item tidak ditemukan.')}</div>`);
   else h+=sec('Top Seller',`<div class="scroll">${prods.slice(0,8).map(card).join('')||empty('Belum ada item. Seller bisa menambah item di tab Akun.')}</div>`);
-  h+=sec(cur?'Sub-kategori':'Kategori',`<div class="cats">${cl.map(c=>`<button class="cat" onclick="cat=${c.id};q='';$('#q').value='';render()">${c.image_url?`<img src="${esc(c.image_url)}" alt="" loading="lazy">`:''}${esc(c.name)}${c.discount_percent?`<small>Diskon ${c.discount_percent}%</small>`:''}</button>`).join('')||empty(cur?'Tidak ada sub-kategori.':'Belum ada kategori.')}</div>`);
+  h+=sec(cur?'Sub-kategori':'Kategori',`<div class="cats">${cl.map(c=>`<button class="cat" onclick="cat=${c.id};q='';$('#q').value='';render()">${c.image_url?`<img src="${esc(c.image_url)}" alt="" loading="lazy">`:''}${esc(c.name)}</button>`).join('')||empty(cur?'Tidak ada sub-kategori.':'Belum ada kategori.')}</div>`);
   return h;
 }
 
@@ -150,7 +150,7 @@ async function upAvatar(el){
   if(r.error)return toast(r.error.message);
   await setUser(me);toast('Foto profil diperbarui');render();
 }
-const FEATS=[['cat','Tambah kategori','Buat kategori baru'],['item','Tambah item','Jual item baru'],['mine','Item saya','Ubah atau hapus item'],['cats','Kelola kategori','Ubah nama, gambar, hapus'],['banner','Banner','Promo di beranda'],['disc','Diskon','Atur diskon kategori']];
+const FEATS=[['cat','Tambah kategori','Buat kategori baru'],['item','Tambah item','Jual item baru'],['mine','Item saya','Ubah atau hapus item'],['cats','Kelola kategori','Ubah nama, gambar, hapus'],['banner','Banner','Promo di beranda']];
 const permBox=()=>`<h3>Atur peran seller</h3><small>Centang fitur yang boleh dipakai seller di panel mereka. Admin selalu punya semua fitur.</small>`+FEATS.map(([k,t,d])=>`<label class="chk"><input type="checkbox" id="pm${k}" ${perms.includes(k)?'checked':''}><span><b>${t}</b><small>${d}</small></span></label>`).join('')+`<button class="btn" onclick="savePerms()">Simpan</button>`;
 async function savePerms(){
   const v=FEATS.map(f=>f[0]).filter(k=>document.getElementById('pm'+k).checked);
@@ -193,14 +193,20 @@ async function upImg(el,target){
   toast('Gambar terunggah. Lanjut simpan item.');
 }
 const RED='background:#b3261e;color:#fff';
-const manage=p=>(prof&&prof.role!='buyer'&&(prof.role=='admin'||p.seller_id==me?.id))?`<h4>Atur item</h4><input id="en" value="${esc(p.name)}" placeholder="Nama item"><input id="ep" type="number" value="${p.price}" placeholder="Harga"><input id="es" type="number" value="${p.stock}" placeholder="Stok"><input id="edd" value="${esc(p.description||'')}" placeholder="Deskripsi"><label class="btn alt">Ganti foto<input id="ef" type="file" accept="image/*" onchange="upImg(this,'ei')" hidden></label><input id="ei" value="${esc(p.image_url)}" placeholder="Link gambar"><label class="btn alt">Ganti QR pembayaran<input type="file" accept="image/*" onchange="upImg(this,'eq')" hidden></label><input id="eq" value="${esc(p.payment_qr_url||'')}" placeholder="Link QR pembayaran">${prof.role=='admin'?`<input id="ed" type="number" min="0" max="100" value="${p.discount_percent||0}" placeholder="Diskon item (%)">`:''}<button class="btn alt" onclick="editProd(${p.id})">Simpan perubahan</button><button class="btn" style="${RED}" onclick="delProd(${p.id})">Hapus item</button>`:'';
+const manage=p=>(prof&&prof.role!='buyer'&&(prof.role=='admin'||p.seller_id==me?.id))?`<h4>Atur item</h4><input id="en" value="${esc(p.name)}" placeholder="Nama item"><input id="ep" type="number" value="${p.price}" placeholder="Harga"><input id="es" type="number" value="${p.stock}" placeholder="Stok"><input id="edd" value="${esc(p.description||'')}" placeholder="Deskripsi"><label class="btn alt">Ganti foto<input id="ef" type="file" accept="image/*" onchange="upImg(this,'ei')" hidden></label><input id="ei" value="${esc(p.image_url)}" placeholder="Link gambar"><label class="btn alt">Ganti QR pembayaran<input type="file" accept="image/*" onchange="upImg(this,'eq')" hidden></label><input id="eq" value="${esc(p.payment_qr_url||'')}" placeholder="Link QR pembayaran"><input id="ed" type="number" min="0" max="100" value="${p.discount_percent||0}" placeholder="Diskon item (%)"><button class="btn alt" onclick="editProd(${p.id})">Simpan perubahan</button><button class="btn" style="${RED}" onclick="delProd(${p.id})">Hapus item</button>`:'';
 const mine=()=>{
   const l=prods.filter(p=>p.seller_id==me.id);
-  return `<h4>Item saya</h4>`+(l.map(p=>`<div class="row" onclick="openP(${p.id})"><img src="${esc(p.image_url)}" alt="" onerror="this.style.visibility='hidden'"><div style="flex:1"><b>${esc(p.name)}</b><small>${rp(p.price)} · stok ${p.stock}</small></div><button class="btn" style="width:auto;margin:0;padding:8px 12px;${RED}" onclick="event.stopPropagation();delProd(${p.id})">Hapus</button></div>`).join('')||empty('Belum ada item. Tambah lewat form di atas.'));
+  return `<h3>Item saya</h3><br>`+(l.map(p=>`<div class="uc"><div class="who" onclick="openP(${p.id})" style="cursor:pointer"><img class="av" style="border-radius:10px" src="${esc(p.image_url)}" alt="" onerror="this.style.visibility='hidden'"><div style="flex:1"><b>${esc(p.name)}</b><small>${priceH(p)} · stok ${p.stock}</small></div></div><div class="urow" style="margin-top:8px"><small>Diskon ${disc(p)}%</small><div class="urow"><button class="btn alt" style="${B2}" onclick="stepDisc(${p.id},-10)">−10%</button><button class="btn alt" style="${B2}" onclick="stepDisc(${p.id},10)">+10%</button></div></div><div class="urow" style="margin-top:6px"><button class="btn alt" style="${B2}" onclick="stepDisc(${p.id},0)">Hapus diskon</button><button class="btn" style="${B2};${RED}" onclick="delProd(${p.id})">Hapus item</button></div></div>`).join('')||empty('Belum ada item. Tambah lewat kotak Tambah item.'));
 };
+async function stepDisc(id,d){
+  const p=prods.find(x=>x.id==id),v=d==0?0:Math.min(100,Math.max(0,(p.discount_percent||0)+d));
+  const{error}=await SB.from('products').update({discount_percent:v}).eq('id',id);
+  if(error)return toast(error.message);
+  p.discount_percent=v;toast(v?'Diskon '+v+'%':'Diskon dihapus');openBox('mine');
+}
 async function editProd(id){
   const row={name:$('#en').value.trim(),price:+$('#ep').value,stock:+$('#es').value,image_url:$('#ei').value.trim(),description:$('#edd').value.trim(),payment_qr_url:$('#eq').value.trim()||null};
-  if(prof.role=='admin'&&$('#ed'))row.discount_percent=Math.min(100,Math.max(0,+$('#ed').value||0));
+  if($('#ed'))row.discount_percent=Math.min(100,Math.max(0,+$('#ed').value||0));
   if(!row.name||!row.price)return toast('Isi nama dan harga');
   const{error}=await SB.from('products').update(row).eq('id',id);
   if(error)return toast(error.message);
