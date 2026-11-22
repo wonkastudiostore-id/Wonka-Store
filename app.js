@@ -2,7 +2,7 @@ const SB=supabase.createClient('https://ynchtzndogltyziitrqv.supabase.co','sb_pu
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const rp=n=>'Rp'+Number(n||0).toLocaleString('id-ID');
-let me=null,prof=null,cats=[],prods=[],orders=[],sellers={},uinfo={},authMode=null,chatTo=null,chatT=null,banners=[],users=[],tab='home',cat=null,q='';
+let me=null,prof=null,cats=[],prods=[],orders=[],sellers={},uinfo={},authMode=null,chatTo=null,chatT=null,banners=[],perms=['cat','item','mine'],users=[],tab='home',cat=null,q='';
 
 function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.display='none',3000)}
 function modal(h){$('#sheet').innerHTML='<button class="x" onclick="closeM()" aria-label="Tutup">×</button>'+h;$('#modal').classList.add('show')}
@@ -14,15 +14,17 @@ async function setUser(u){
   if(me){const{data}=await SB.from('profiles').select('*').eq('id',me.id).single();prof=data}
 }
 async function load(){
-  const[c,p,b,si]=await Promise.all([
+  const[c,p,b,si,pm]=await Promise.all([
     SB.from('categories').select('*').order('name'),
     SB.from('products').select('*').eq('active',true).order('sold_count',{ascending:false}),
     SB.from('banners').select('*').eq('active',true).order('sort').order('id'),
-    SB.from('seller_info').select('*')
+    SB.from('seller_info').select('*'),
+    SB.from('settings').select('value').eq('key','seller_perms').maybeSingle()
   ]);
   if(c.error||p.error)toast('Gagal memuat data');
   cats=c.data||[];prods=p.data||[];banners=b.data||[];
   sellers=Object.fromEntries((si.data||[]).map(x=>[x.id,x]));
+  try{const v=JSON.parse(pm.data?.value);if(Array.isArray(v))perms=v}catch(e){}
 }
 async function init(){
   const{data:{session}}=await SB.auth.getSession();
@@ -147,6 +149,14 @@ async function upAvatar(el){
   if(r.error)return toast(r.error.message);
   await setUser(me);toast('Foto profil diperbarui');render();
 }
+const FEATS=[['cat','Tambah kategori','Buat kategori baru'],['item','Tambah item','Jual item baru'],['mine','Item saya','Ubah atau hapus item'],['cats','Kelola kategori','Ubah nama, gambar, hapus'],['banner','Banner','Promo di beranda'],['disc','Diskon','Atur diskon kategori']];
+const permBox=()=>`<h3>Atur peran seller</h3><small>Centang fitur yang boleh dipakai seller di panel mereka. Admin selalu punya semua fitur.</small>`+FEATS.map(([k,t,d])=>`<label class="chk"><input type="checkbox" id="pm${k}" ${perms.includes(k)?'checked':''}><span><b>${t}</b><small>${d}</small></span></label>`).join('')+`<button class="btn" onclick="savePerms()">Simpan</button>`;
+async function savePerms(){
+  const v=FEATS.map(f=>f[0]).filter(k=>document.getElementById('pm'+k).checked);
+  const{error}=await SB.from('settings').upsert({key:'seller_perms',value:JSON.stringify(v)});
+  if(error)return toast(error.message);
+  perms=v;toast('Pengaturan seller disimpan');render();
+}
 const tile=(k,t,d)=>`<button class="tile" onclick="openBox('${k}')"><b>${t}</b><small>${d}</small></button>`;
 const PEN='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.828 2.828 0 1 0-4-4l-10.5 10.5v4"/><path d="M13.5 6.5l4 4"/></svg>';
 function editName(){modal(`<h3>Ubah nama</h3><input id="pnm" value="${esc(prof?.name||'')}" placeholder="Nama"><button class="btn" onclick="saveName()">Simpan</button>`)}
@@ -156,15 +166,15 @@ function chatAdmin(){
   chatTo={b:me.id,s:a.id};go('chat');
 }
 async function openBox(k){
-  const f={cat:catForm,item:itemForm,mine,disc:discBox,cats:catsBox,banner:bannerBox,users:usersBox}[k];
+  const f={cat:catForm,item:itemForm,mine,disc:discBox,cats:catsBox,banner:bannerBox,users:usersBox,perm:permBox}[k];
   modal(await f());
 }
 async function akun(){
   if(!me)return auth();
   const r=prof?.role||'buyer';
   let h=`<div class="who"><label class="avl" aria-label="Ganti foto profil">${av(prof)}<input type="file" accept="image/*" onchange="upAvatar(this)" hidden></label><div><div class="nm"><h3>${esc(prof?.name||'Pengguna')}</h3><button class="ic" onclick="editName()" aria-label="Ubah nama">${PEN}</button></div><small>${esc(me.email)} · ${esc(r)}</small></div></div>`;
-  if(r!='buyer')h+=`<div class="wallet"><small>Dompetku</small><b>${rp(prof?.coins)}</b></div><h4>Penjualan</h4><div class="tiles">${tile('cat','Tambah kategori','Buat kategori baru')}${tile('item','Tambah item','Jual item baru')}${tile('mine','Item saya','Ubah atau hapus')}</div>`;
-  if(r=='admin')h+=`<h4>Admin</h4><div class="tiles">${tile('cats','Kategori','Ubah dan hapus')}${tile('banner','Banner','Promo di beranda')}${tile('disc','Diskon','Per kategori')}${tile('users','Pengguna','Peran, koin, akun')}</div>`;
+  if(r!='buyer')h+=`<div class="wallet"><small>Dompetku</small><b>${rp(prof?.coins)}</b></div><h4>Penjualan</h4><div class="tiles">${FEATS.filter(f=>r=='admin'||perms.includes(f[0])).map(f=>tile(...f)).join('')}</div>`;
+  if(r=='admin')h+=`<h4>Admin</h4><div class="tiles">${tile('users','Pengguna','Peran, koin, akun')}${tile('perm','Atur peran seller','Pilih fitur seller')}</div>`;
   h+=`<h4>Bantuan</h4>`+(r!='admin'?`<div class="row" onclick="chatAdmin()"><div><b>Chat admin</b><small>Tanya atau laporkan masalah</small></div></div>`:'')+`<button class="btn alt" onclick="logout()">Keluar</button>`;
   return h;
 }
