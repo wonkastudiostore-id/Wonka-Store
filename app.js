@@ -12,6 +12,7 @@ function go(t){tab=t;render();scrollTo(0,0)}
 async function setUser(u){
   me=u||null;prof=null;
   if(me){const{data}=await SB.from('profiles').select('*').eq('id',me.id).single();prof=data}
+  refreshNotif();refreshChatBadge();
 }
 async function load(){
   const[c,p,b,si,pm]=await Promise.all([
@@ -32,6 +33,9 @@ async function init(){
 }
 async function render(){
   clearInterval(chatT);closeM();
+  document.body.classList.toggle('inchat',tab=='chat'&&!!chatTo);
+  const sb=$('#sbtn');if(sb)sb.style.display=tab=='home'?'':'none';
+  if(tab!='home')$('#sp').classList.remove('open');
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==tab));
   $('#main').innerHTML=await({home,chat:chatV,transaksi:trx,akun}[tab])();
 }
@@ -321,6 +325,62 @@ async function setRole(id,role){
   const{error}=await SB.from('profiles').update({role,blocked:false}).eq('id',id);
   toast(error?error.message:'Peran diubah');
 }
+const ARW='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/><path d="M5 12l6 6"/><path d="M5 12l6-6"/></svg>';
+const PLUS='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"/><path d="M5 12h14"/></svg>';
+const SEND='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14l11-11"/><path d="M21 3l-6.5 18a.55.55 0 0 1-1 0l-3.5-7l-7-3.5a.55.55 0 0 1 0-1l18-6.5"/></svg>';
+function baseT(){try{let v=localStorage.getItem('wk_base_'+me.id);if(!v){v=new Date().toISOString();localStorage.setItem('wk_base_'+me.id,v)}return v}catch(e){return new Date().toISOString()}}
+const readT=o=>{try{return localStorage.getItem('wk_read_'+me.id+'_'+o)||baseT()}catch(e){return baseT()}};
+function markRead(o,t){try{localStorage.setItem('wk_read_'+me.id+'_'+o,t)}catch(e){}}
+let unread={};
+async function refreshChatBadge(){
+  const b=$('#cb');if(!b)return;
+  if(!me){b.hidden=true;return}
+  const{data}=await SB.from('messages').select('sender_id,created_at').neq('sender_id',me.id).order('created_at',{ascending:false}).limit(200);
+  unread={};
+  (data||[]).forEach(x=>{if(new Date(x.created_at)>new Date(readT(x.sender_id)))unread[x.sender_id]=(unread[x.sender_id]||0)+1});
+  const n=Object.values(unread).reduce((a,c)=>a+c,0);
+  b.hidden=!n;b.textContent=n>9?'9+':n;
+}
+let nlist=[];
+const seenKey=()=>'wk_seen_'+(me?.id||'');
+function seen(){try{let v=localStorage.getItem(seenKey());if(!v){v=new Date().toISOString();localStorage.setItem(seenKey(),v)}return v}catch(e){return new Date(0).toISOString()}}
+async function getNotifs(){
+  if(!me)return[];
+  const[m,o,u]=await Promise.all([
+    SB.from('messages').select('*').neq('sender_id',me.id).order('created_at',{ascending:false}).limit(15),
+    SB.from('orders').select('*,products(name)').order('updated_at',{ascending:false}).limit(15),
+    SB.from('user_info').select('*')
+  ]);
+  uinfo=Object.fromEntries((u.data||[]).map(x=>[x.id,x]));
+  const a=[];
+  (m.data||[]).forEach(x=>a.push({t:x.created_at,txt:'Pesan dari '+(uinfo[x.sender_id]?.name||'pengguna')+': '+(x.body||'Gambar'),chat:{b:x.buyer_id,s:x.seller_id}}));
+  (o.data||[]).forEach(x=>{
+    const n=x.products?.name||'Item',buyer=x.buyer_id==me.id;
+    if(buyer&&x.status=='pending')return;
+    a.push({t:x.updated_at||x.created_at,txt:!buyer&&x.status=='pending'?'Pesanan baru: '+n:n+': '+ST[x.status]});
+  });
+  return a.sort((x,y)=>new Date(y.t)-new Date(x.t)).slice(0,20);
+}
+async function refreshNotif(){
+  const b=$('#nb');if(!b)return;
+  if(!me){b.hidden=true;return}
+  nlist=await getNotifs();
+  const sn=new Date(seen()),n=nlist.filter(x=>new Date(x.t)>sn).length;
+  b.hidden=!n;b.textContent=n>9?'9+':n;
+}
+async function openNotif(){
+  if(!me){toast('Masuk dulu untuk melihat notifikasi');return go('akun')}
+  nlist=await getNotifs();
+  const sn=new Date(seen());
+  modal(`<h3>Notifikasi</h3><br>`+(nlist.map((x,i)=>`<div class="row" onclick="goNotif(${i})"><div style="flex:1"><b>${esc(x.txt)}</b><small>${new Date(x.t).toLocaleString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}${new Date(x.t)>sn?' · baru':''}</small></div></div>`).join('')||empty('Belum ada notifikasi.')));
+  try{localStorage.setItem(seenKey(),new Date().toISOString())}catch(e){}
+  $('#nb').hidden=true;
+}
+function goNotif(i){const x=nlist[i];closeM();if(x.chat){chatTo=x.chat;go('chat')}else go('transaksi')}
+function toggleSearch(){
+  const p=$('#sp'),open=p.classList.toggle('open');
+  if(open)$('#q').focus();else{q='';$('#q').value='';render()}
+}
 function openChat(sid){
   if(!me){closeM();toast('Masuk dulu untuk chat');return go('akun')}
   chatTo={b:me.id,s:sid};closeM();go('chat');
@@ -331,20 +391,29 @@ async function chatV(){
   uinfo=Object.fromEntries((u||[]).map(x=>[x.id,x]));
   if(chatTo){
     const o=uinfo[me.id==chatTo.b?chatTo.s:chatTo.b];
-    setTimeout(()=>{drawMsgs();chatT=setInterval(drawMsgs,4000)},0);
-    return `<button class="btn alt" onclick="chatTo=null;render()">‹ Kembali</button><div class="who sel">${av(o)}<b>${esc(o?.name||'Pengguna')}</b></div><div id="msgs"></div><div class="urow"><input id="mi" style="flex:1;min-width:0" placeholder="Tulis pesan" onkeydown="if(event.key=='Enter')sendMsg()"><label class="btn alt" style="${B2}">Gambar<input type="file" accept="image/*" onchange="sendImg(this)" hidden></label><button class="btn" style="${B2}" onclick="sendMsg()">Kirim</button></div>`;
+    setTimeout(()=>{drawMsgs(true);chatT=setInterval(drawMsgs,4000)},0);
+    return `<div class="ctop"><button class="ic" onclick="chatTo=null;render()" aria-label="Kembali">${ARW}</button>${av(o)}<div><b>${esc(o?.name||'Pengguna')}</b><small>Tekan lama pesanmu untuk menghapus</small></div></div><div id="msgs"></div><div class="cbar"><label class="ic plus" aria-label="Kirim gambar">${PLUS}<input type="file" accept="image/*" onchange="sendImg(this)" hidden></label><input id="mi" placeholder="Tulis pesan" onkeydown="if(event.key=='Enter')sendMsg()"><button class="ic send" onclick="sendMsg()" aria-label="Kirim">${SEND}</button></div>`;
   }
+  await refreshChatBadge();
   const{data}=await SB.from('messages').select('*').order('created_at',{ascending:false});
   const seen={},rows=[];
   (data||[]).forEach(m=>{const o=m.buyer_id==me.id?m.seller_id:m.buyer_id;if(!seen[o]){seen[o]=1;rows.push([o,m])}});
-  return `<h3>Chat</h3><br>`+(rows.map(([o,m])=>`<div class="row" onclick="chatTo={b:${m.buyer_id==me.id?`'${me.id}'`:`'${m.buyer_id}'`},s:'${m.seller_id}'};render()">${av(uinfo[o])}<div><b>${esc(uinfo[o]?.name||'Pengguna')}</b><small>${esc(m.body?m.body.slice(0,40):'Gambar')}</small></div></div>`).join('')||empty('Belum ada chat. Buka item lalu tekan Chat penjual.'));
+  return `<h3>Chat</h3><br>`+(rows.map(([o,m])=>`<div class="row" onclick="chatTo={b:${m.buyer_id==me.id?`'${me.id}'`:`'${m.buyer_id}'`},s:'${m.seller_id}'};render()">${av(uinfo[o])}<div style="flex:1"><b>${esc(uinfo[o]?.name||'Pengguna')}</b><small>${esc(m.body?m.body.slice(0,40):'Gambar')}</small></div>${unread[o]?`<span class="nb inl">${unread[o]}</span>`:''}</div>`).join('')||empty('Belum ada chat. Buka item lalu tekan Chat penjual.'));
 }
-async function drawMsgs(){
+async function drawMsgs(first){
   const e=$('#msgs');if(!e||!chatTo)return;
   const{data}=await SB.from('messages').select('*').eq('buyer_id',chatTo.b).eq('seller_id',chatTo.s).order('created_at');
-  const atEnd=e.scrollHeight-e.scrollTop-e.clientHeight<60;
-  e.innerHTML=(data||[]).map(m=>`<div class="msg ${m.sender_id==me.id?'me':''}">${m.image_url?`<img class="mimg" src="${esc(m.image_url)}" alt="Gambar" onclick="window.open(this.src)">`:''}${esc(m.body)}</div>`).join('')||empty('Belum ada pesan.');
-  if(atEnd)e.scrollTop=e.scrollHeight;
+  const inc=(data||[]).filter(m=>m.sender_id!=me.id).pop();
+  if(inc){markRead(me.id==chatTo.b?chatTo.s:chatTo.b,inc.created_at);refreshChatBadge()}
+  const atEnd=first===true||innerHeight+scrollY>=document.body.scrollHeight-140;
+  e.innerHTML=(data||[]).map(m=>{const me_=m.sender_id==me.id;return `<div class="msg ${me_?'me':''}" ${me_?`oncontextmenu="delMsg(${m.id});return false"`:''}>${m.image_url?`<img class="mimg" src="${esc(m.image_url)}" alt="Gambar" onclick="window.open(this.src)">`:''}${esc(m.body)}</div>`}).join('')||empty('Belum ada pesan.');
+  if(atEnd)scrollTo(0,document.body.scrollHeight);
+}
+async function delMsg(id){
+  if(!confirm('Hapus pesan ini?'))return;
+  const{error}=await SB.from('messages').delete().eq('id',id);
+  if(error)return toast(error.message);
+  drawMsgs();
 }
 async function sendMsg(){
   const i=$('#mi'),body=i.value.trim();if(!body)return;
@@ -372,6 +441,7 @@ async function sendImg(el){
   if(r.error)return toast(r.error.message);
   el.value='';drawMsgs();
 }
+setInterval(()=>{refreshNotif();refreshChatBadge()},10000);
 setInterval(()=>{
   const e=$('.bn');
   if(!e||banners.length<2||matchMedia('(prefers-reduced-motion: reduce)').matches)return;

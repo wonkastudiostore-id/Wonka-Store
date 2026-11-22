@@ -10,16 +10,19 @@
 </head>
 <body>
 <header>
-  <div class="logo">Wonka Store</div>
-  <div class="sbox">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6"/></svg>
-    <input id="q" placeholder="Cari kategori atau item" oninput="q=this.value;tab='home';render()">
+  <div class="top">
+    <div class="logo">Wonka Store</div>
+    <div class="hb">
+      <button class="ib" onclick="openNotif()" aria-label="Notifikasi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2-3v-3a7 7 0 0 1 4-6"/><path d="M9 17v1a3 3 0 0 0 6 0v-1"/></svg><span id="nb" class="nb" hidden></span></button>
+      <button class="ib" id="sbtn" onclick="toggleSearch()" aria-label="Cari"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6"/></svg></button>
+    </div>
   </div>
+  <div id="sp" class="sp"><div class="sbox"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6"/></svg><input id="q" placeholder="Cari kategori atau item" oninput="q=this.value;render()"></div></div>
 </header>
 <main id="main"></main>
 <nav>
   <button data-t="home" onclick="go('home')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l-2 0l9-9l9 9l-2 0"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/><path d="M9 21v-6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v6"/></svg>Home</button>
-  <button data-t="chat" onclick="go('chat')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9h8"/><path d="M8 13h6"/><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5l-5 3v-3h-2a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3h12z"/></svg>Chat</button>
+  <button data-t="chat" onclick="go('chat')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 9h8"/><path d="M8 13h6"/><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-5l-5 3v-3h-2a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3h12z"/></svg>Chat<span id="cb" class="nb" hidden></span></button>
   <button data-t="transaksi" onclick="go('transaksi')"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21v-16a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16l-3-2l-2 2l-2-2l-2 2l-2-2l-3 2"/><path d="M14 8h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3h-2.5"/><path d="M12 7v1m0 6v1"/></svg>Transaksi</button>
   <button data-t="akun" onclick="go('akun')"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/></svg>Akun</button>
 </nav>
