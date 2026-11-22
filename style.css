@@ -98,3 +98,6 @@ label.btn{display:block;text-align:center;cursor:pointer}
 nav button{position:relative}
 nav .nb{top:0;right:calc(50% - 26px)}
 .nb.inl{position:static;flex:0 0 auto}
+.stars{display:flex;gap:6px;margin:14px 0}
+.stars button{flex:1;background:var(--bg);border:1px solid var(--line);border-radius:12px;color:#fbbf24;font-size:26px;padding:8px 0}
+.stars button small{color:var(--mut);font-size:12px}

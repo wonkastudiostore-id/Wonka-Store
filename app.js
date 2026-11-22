@@ -15,16 +15,18 @@ async function setUser(u){
   refreshNotif();refreshChatBadge();
 }
 async function load(){
-  const[c,p,b,si,pm]=await Promise.all([
+  const[c,p,b,si,pm,rt]=await Promise.all([
     SB.from('categories').select('*').order('name'),
     SB.from('products').select('*').eq('active',true).order('sold_count',{ascending:false}),
     SB.from('banners').select('*').eq('active',true).order('sort').order('id'),
     SB.from('seller_info').select('*'),
-    SB.from('settings').select('value').eq('key','seller_perms').maybeSingle()
+    SB.from('settings').select('value').eq('key','seller_perms').maybeSingle(),
+    SB.from('seller_rating').select('*')
   ]);
   if(c.error||p.error)toast('Gagal memuat data');
   cats=c.data||[];prods=p.data||[];banners=b.data||[];
   sellers=Object.fromEntries((si.data||[]).map(x=>[x.id,x]));
+  ratings=Object.fromEntries((rt.data||[]).map(x=>[x.seller_id,x]));
   try{const v=JSON.parse(pm.data?.value);if(Array.isArray(v))perms=v}catch(e){}
 }
 async function init(){
@@ -68,10 +70,10 @@ function home(){
 
 function openP(id){
   const p=prods.find(x=>x.id==id),sl=sellers[p.seller_id];
-  modal(`<img src="${esc(p.image_url)}" alt="" onerror="this.remove()"><h3>${esc(p.name)}</h3><p>${priceH(p)}</p><small>Stok ${p.stock}</small>${p.description?`<p style="margin:10px 0">${esc(p.description)}</p>`:''}${p.seller_id?`<div class="who sel">${av(sl)}<div><b>${esc(sl?.name||'Penjual')}</b><small>Penjual</small></div></div>`:''}<button class="btn" onclick="buy(${p.id})">Beli sekarang</button>${p.seller_id&&p.seller_id!=me?.id?`<button class="btn alt" onclick="openChat('${p.seller_id}')">Chat penjual</button>`:''}`+manage(p));
+  modal(`<img src="${esc(p.image_url)}" alt="" onerror="this.remove()"><h3>${esc(p.name)}</h3><p>${priceH(p)}</p><small>Stok ${p.stock}</small>${p.description?`<p style="margin:10px 0">${esc(p.description)}</p>`:''}${p.seller_id?`<div class="who sel">${av(sl)}<div><b>${esc(sl?.name||'Penjual')}</b><small>Penjual · ${starsH(ratings[p.seller_id])}</small></div></div>`:''}<button class="btn" onclick="buy(${p.id})">Beli sekarang</button>${p.seller_id&&p.seller_id!=me?.id?`<button class="btn alt" onclick="openChat('${p.seller_id}')">Chat penjual</button>`:''}`+manage(p));
 }
 async function buy(id){
-  if(!me){closeM();toast('Masuk dulu di tab Akun');return go('akun')}
+  if(!me){modal(`<h3>Login diperlukan</h3><p style="margin:8px 0">Untuk membeli, kamu harus masuk jika sudah punya akun. Jika belum punya akun, silakan daftar atau buat akun dulu.</p><button class="btn" onclick="authMode='masuk';go('akun')">Masuk</button><button class="btn alt" onclick="authMode='daftar';go('akun')">Daftar</button>`);return}
   const p=prods.find(x=>x.id==id);
   if(p.stock<1)return toast('Stok habis');
   const{data,error}=await SB.from('orders').insert({buyer_id:me.id,seller_id:p.seller_id,product_id:p.id,amount:fp(p)}).select().single();
@@ -79,23 +81,26 @@ async function buy(id){
   toast('Pesanan dibuat');payPop(p,data);
 }
 
-const ST={pending:'Menunggu pembayaran',paid:'Menunggu dikirim',shipped:'Sudah terkirim',done:'Selesai'};
+const ST={pending:'Menunggu pembayaran',sent:'Menunggu konfirmasi seller',paid:'Menunggu dikirim',shipped:'Sudah terkirim',done:'Selesai'};
 let tf='all';
 async function trx(){
   if(!me)return auth('Masuk untuk melihat transaksi.');
   const{data}=await SB.from('orders').select('*,products(name,image_url,sold_count,payment_qr_url)').order('created_at',{ascending:false});
-  orders=data||[];
+  orders=(data||[]).filter(o=>o.buyer_id==me.id||o.seller_id==me.id);
+  const{data:rv}=await SB.from('reviews').select('order_id').eq('buyer_id',me.id);
+  rated=new Set((rv||[]).map(r=>r.order_id));
   const l=orders.filter(o=>tf=='all'||o.status==tf);
   const chips=[['all','Semua'],...Object.entries(ST)].map(([k,v])=>`<button class="chip ${tf==k?'on':''}" onclick="tf='${k}';render()">${v}</button>`).join('');
   return `<div class="chips">${chips}</div>`+(l.map(o=>`<div class="row" onclick="openO(${o.id})"><img src="${esc(o.products?.image_url)}" alt="" onerror="this.style.visibility='hidden'"><div><b>${esc(o.products?.name||'Item dihapus')}</b><small>${rp(o.amount)} · ${ST[o.status]||esc(o.status)} · ${o.buyer_id==me.id?'Beli':'Jual'}</small></div></div>`).join('')||empty('Belum ada transaksi di status ini.'));
 }
 function openO(id){
-  const o=orders.find(x=>x.id==id),ad=prof?.role=='admin';
+  const o=orders.find(x=>x.id==id),buyer=o.buyer_id==me.id,sel=o.seller_id==me.id;
   let b='';
-  if(o.buyer_id==me.id&&o.status=='pending')b+=`<button class="btn" onclick="payPop({payment_qr_url:orders.find(x=>x.id==${o.id}).products?.payment_qr_url,seller_id:'${o.seller_id}'},orders.find(x=>x.id==${o.id}))">Lihat QR pembayaran</button>`;
-  if(ad&&o.status=='pending')b+=`<button class="btn alt" onclick="confirmO(${o.id})">Konfirmasi pembayaran</button>`;
-  if((o.seller_id==me.id||ad)&&o.status=='paid')b+=`<button class="btn" onclick="setSt(${o.id},'shipped')">Tandai sudah dikirim</button>`;
-  if((o.buyer_id==me.id||ad)&&o.status=='shipped')b+=`<button class="btn" onclick="setSt(${o.id},'done')">Pesanan diterima</button>`;
+  if(buyer&&o.status=='pending')b+=`<button class="btn alt" onclick="payPop({payment_qr_url:orders.find(x=>x.id==${o.id}).products?.payment_qr_url,seller_id:'${o.seller_id}'},orders.find(x=>x.id==${o.id}))">Lihat QR pembayaran</button><button class="btn" onclick="setSt(${o.id},'sent')">Saya sudah bayar</button>`;
+  if(sel&&o.status=='sent')b+=`<button class="btn" onclick="confirmO(${o.id})">Uang sudah diterima</button>`;
+  if(sel&&o.status=='paid')b+=`<button class="btn" onclick="setSt(${o.id},'shipped')">Pesanan sudah dikirim</button>`;
+  if(buyer&&o.status=='shipped')b+=`<button class="btn" onclick="setSt(${o.id},'done')">Pesanan diterima</button>`;
+  if(buyer&&o.status=='done'&&o.seller_id&&!rated.has(o.id))b+=`<button class="btn alt" onclick="rateBox(${o.id})">Beri bintang untuk penjual</button>`;
   modal(`<h3>Detail transaksi</h3><p>${esc(o.products?.name||'Item dihapus')}</p><p class="pr">${rp(o.amount)}</p><small>${ST[o.status]||esc(o.status)} · ${new Date(o.created_at).toLocaleString('id-ID')}</small>`+b);
 }
 async function setSt(id,st){
@@ -106,7 +111,7 @@ async function setSt(id,st){
 async function confirmO(id){
   const{error}=await SB.rpc('confirm_order',{oid:id});
   if(error)return toast(error.message);
-  closeM();await load();await setUser(me);toast('Pembayaran dikonfirmasi');render();
+  closeM();await load();await setUser(me);toast('Uang diterima, lanjut kirim pesanan');render();
 }
 async function coin(uid,n,note){
   const{data:u}=await SB.from('profiles').select('coins').eq('id',uid).single();
@@ -356,6 +361,7 @@ async function getNotifs(){
   (m.data||[]).forEach(x=>a.push({t:x.created_at,txt:'Pesan dari '+(uinfo[x.sender_id]?.name||'pengguna')+': '+(x.body||'Gambar'),chat:{b:x.buyer_id,s:x.seller_id}}));
   (o.data||[]).forEach(x=>{
     const n=x.products?.name||'Item',buyer=x.buyer_id==me.id;
+    if(!buyer&&x.seller_id!=me.id)return;
     if(buyer&&x.status=='pending')return;
     a.push({t:x.updated_at||x.created_at,txt:!buyer&&x.status=='pending'?'Pesanan baru: '+n:n+': '+ST[x.status]});
   });
@@ -410,7 +416,15 @@ async function drawMsgs(first){
   e.innerHTML=(data||[]).map(m=>{const me_=m.sender_id==me.id;return `<div class="msg ${me_?'me':''}" ${me_?`onclick="msgMenu(${m.id})"`:''}>${m.image_url?`<img class="mimg" src="${esc(m.image_url)}" alt="Gambar" ${me_?'':'onclick="window.open(this.src)"'}>`:''}${esc(m.body)}</div>`}).join('')||empty('Belum ada pesan.');
   if(atEnd)scrollTo(0,document.body.scrollHeight);
 }
-let msgs=[];
+let msgs=[],ratings={},rated=new Set();
+const starsH=r=>r?`<span style="color:#fbbf24">★ ${Number(r.avg).toFixed(1)}</span> (${r.n})`:'Belum ada penilaian';
+function rateBox(id){modal(`<h3>Beri bintang</h3><small>Seberapa baik penjual ini?</small><div class="stars">${[1,2,3,4,5].map(n=>`<button onclick="rate(${id},${n})" aria-label="${n} bintang">★<small>${n}</small></button>`).join('')}</div>`)}
+async function rate(id,n){
+  const o=orders.find(x=>x.id==id);
+  const{error}=await SB.from('reviews').insert({order_id:id,seller_id:o.seller_id,buyer_id:me.id,stars:n});
+  if(error)return toast(error.message);
+  closeM();await load();toast('Terima kasih atas penilaiannya');render();
+}
 function msgMenu(id){
   const m=msgs.find(x=>x.id==id);if(!m)return;
   modal(`<h3>Pesan</h3>${m.image_url?`<img src="${esc(m.image_url)}" alt="Gambar">`:''}${m.body?`<p style="margin:8px 0">${esc(m.body)}</p>`:''}<button class="btn" style="${RED}" onclick="delMsg(${m.id})">Hapus pesan</button>`);
@@ -430,7 +444,7 @@ async function sendMsg(){
 }
 function payPop(p,o){
   const u=p.payment_qr_url;
-  modal(`<h3>Bayar pesanan</h3><p class="pr">${rp(o.amount)}</p>${u?`<img src="${esc(u)}" alt="QR pembayaran" style="background:#fff;max-height:300px;object-fit:contain">`:'<p class="mut">Penjual belum menambahkan QR pembayaran. Hubungi penjual lewat chat.</p>'}<small>Screenshot atau unduh QR ini, bayar sesuai nominal, lalu kirim bukti pembayaran lewat chat penjual.</small>${u?`<button class="btn alt" onclick="dlQR('${esc(u)}')">Unduh QR</button>`:''}<button class="btn" onclick="openChat('${p.seller_id}')">Chat penjual</button><button class="btn alt" onclick="go('transaksi')">Lihat transaksi</button>`);
+  modal(`<h3>Bayar pesanan</h3><p class="pr">${rp(o.amount)}</p>${u?`<img src="${esc(u)}" alt="QR pembayaran" style="background:#fff;max-height:300px;object-fit:contain">`:'<p class="mut">Penjual belum menambahkan QR pembayaran. Hubungi penjual lewat chat.</p>'}<small>Screenshot atau unduh QR ini, bayar sesuai nominal, lalu kirim bukti pembayaran lewat chat penjual.</small>${u?`<button class="btn alt" onclick="dlQR('${esc(u)}')">Unduh QR</button>`:''}<button class="btn" onclick="setSt(${o.id},'sent')">Saya sudah bayar</button><button class="btn alt" onclick="openChat('${p.seller_id}')">Chat penjual</button><button class="btn alt" onclick="go('transaksi')">Lihat transaksi</button>`);
 }
 async function dlQR(u){
   try{const b=await(await fetch(u)).blob(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='qr-pembayaran.png';a.click()}
