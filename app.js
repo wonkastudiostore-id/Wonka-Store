@@ -72,14 +72,14 @@ async function buy(id){
   if(p.stock<1)return toast('Stok habis');
   const{data,error}=await SB.from('orders').insert({buyer_id:me.id,seller_id:p.seller_id,product_id:p.id,amount:fp(p)}).select().single();
   if(error)return toast(error.message);
-  closeM();toast('Pesanan dibuat');go('transaksi');
+  toast('Pesanan dibuat');payPop(p,data);
 }
 
 const ST={pending:'Menunggu pembayaran',paid:'Menunggu dikirim',shipped:'Sudah terkirim',done:'Selesai'};
 let tf='all';
 async function trx(){
   if(!me)return auth('Masuk untuk melihat transaksi.');
-  const{data}=await SB.from('orders').select('*,products(name,image_url,sold_count)').order('created_at',{ascending:false});
+  const{data}=await SB.from('orders').select('*,products(name,image_url,sold_count,payment_qr_url)').order('created_at',{ascending:false});
   orders=data||[];
   const l=orders.filter(o=>tf=='all'||o.status==tf);
   const chips=[['all','Semua'],...Object.entries(ST)].map(([k,v])=>`<button class="chip ${tf==k?'on':''}" onclick="tf='${k}';render()">${v}</button>`).join('');
@@ -88,6 +88,7 @@ async function trx(){
 function openO(id){
   const o=orders.find(x=>x.id==id),ad=prof?.role=='admin';
   let b='';
+  if(o.buyer_id==me.id&&o.status=='pending')b+=`<button class="btn" onclick="payPop({payment_qr_url:orders.find(x=>x.id==${o.id}).products?.payment_qr_url,seller_id:'${o.seller_id}'},orders.find(x=>x.id==${o.id}))">Lihat QR pembayaran</button>`;
   if(ad&&o.status=='pending')b+=`<button class="btn alt" onclick="confirmO(${o.id})">Konfirmasi pembayaran</button>`;
   if((o.seller_id==me.id||ad)&&o.status=='paid')b+=`<button class="btn" onclick="setSt(${o.id},'shipped')">Tandai sudah dikirim</button>`;
   if((o.buyer_id==me.id||ad)&&o.status=='shipped')b+=`<button class="btn" onclick="setSt(${o.id},'done')">Pesanan diterima</button>`;
@@ -179,7 +180,7 @@ async function akun(){
   return h;
 }
 const catForm=()=>`<h3>Tambah kategori</h3><input id="cn" placeholder="Nama kategori atau game"><select id="cp"><option value="">Kategori utama (tanpa induk)</option>${cats.map(c=>`<option value="${c.id}">Di dalam ${esc(path(c))}</option>`).join('')}</select><label class="btn alt">Pilih gambar kategori<input type="file" accept="image/*" onchange="upImg(this,'ci')" hidden></label><input id="ci" placeholder="Link gambar (terisi otomatis)"><button class="btn" onclick="addCat()">Tambah kategori</button>`;
-const itemForm=()=>`<h3>Tambah item</h3><select id="pc">${cats.map(c=>`<option value="${c.id}">${esc(path(c))}</option>`).join('')}</select><input id="pn" placeholder="Nama item"><input id="pd" placeholder="Deskripsi item"><input id="pp" type="number" placeholder="Harga (Rp)"><input id="ps" type="number" placeholder="Stok"><label class="btn alt">Pilih foto dari galeri<input id="pf" type="file" accept="image/*" onchange="upImg(this,'pi')" hidden></label><input id="pi" placeholder="Link gambar (terisi otomatis)"><button class="btn" onclick="addProd()">Simpan item</button>`;
+const itemForm=()=>`<h3>Tambah item</h3><select id="pc">${cats.map(c=>`<option value="${c.id}">${esc(path(c))}</option>`).join('')}</select><input id="pn" placeholder="Nama item"><input id="pd" placeholder="Deskripsi item"><input id="pp" type="number" placeholder="Harga (Rp)"><input id="ps" type="number" placeholder="Stok"><label class="btn alt">Pilih foto dari galeri<input id="pf" type="file" accept="image/*" onchange="upImg(this,'pi')" hidden></label><input id="pi" placeholder="Link gambar (terisi otomatis)"><label class="btn alt">Pilih gambar QR pembayaran<input type="file" accept="image/*" onchange="upImg(this,'pq')" hidden></label><input id="pq" placeholder="Link QR pembayaran (terisi otomatis)"><button class="btn" onclick="addProd()">Simpan item</button>`;
 async function upImg(el,target){
   const f=el.files[0];if(!f)return;
   if(f.size>5*1024*1024)return toast('Ukuran gambar maksimal 5 MB');
@@ -192,13 +193,13 @@ async function upImg(el,target){
   toast('Gambar terunggah. Lanjut simpan item.');
 }
 const RED='background:#b3261e;color:#fff';
-const manage=p=>(prof&&prof.role!='buyer'&&(prof.role=='admin'||p.seller_id==me?.id))?`<h4>Atur item</h4><input id="en" value="${esc(p.name)}" placeholder="Nama item"><input id="ep" type="number" value="${p.price}" placeholder="Harga"><input id="es" type="number" value="${p.stock}" placeholder="Stok"><input id="edd" value="${esc(p.description||'')}" placeholder="Deskripsi"><label class="btn alt">Ganti foto<input id="ef" type="file" accept="image/*" onchange="upImg(this,'ei')" hidden></label><input id="ei" value="${esc(p.image_url)}" placeholder="Link gambar">${prof.role=='admin'?`<input id="ed" type="number" min="0" max="100" value="${p.discount_percent||0}" placeholder="Diskon item (%)">`:''}<button class="btn alt" onclick="editProd(${p.id})">Simpan perubahan</button><button class="btn" style="${RED}" onclick="delProd(${p.id})">Hapus item</button>`:'';
+const manage=p=>(prof&&prof.role!='buyer'&&(prof.role=='admin'||p.seller_id==me?.id))?`<h4>Atur item</h4><input id="en" value="${esc(p.name)}" placeholder="Nama item"><input id="ep" type="number" value="${p.price}" placeholder="Harga"><input id="es" type="number" value="${p.stock}" placeholder="Stok"><input id="edd" value="${esc(p.description||'')}" placeholder="Deskripsi"><label class="btn alt">Ganti foto<input id="ef" type="file" accept="image/*" onchange="upImg(this,'ei')" hidden></label><input id="ei" value="${esc(p.image_url)}" placeholder="Link gambar"><label class="btn alt">Ganti QR pembayaran<input type="file" accept="image/*" onchange="upImg(this,'eq')" hidden></label><input id="eq" value="${esc(p.payment_qr_url||'')}" placeholder="Link QR pembayaran">${prof.role=='admin'?`<input id="ed" type="number" min="0" max="100" value="${p.discount_percent||0}" placeholder="Diskon item (%)">`:''}<button class="btn alt" onclick="editProd(${p.id})">Simpan perubahan</button><button class="btn" style="${RED}" onclick="delProd(${p.id})">Hapus item</button>`:'';
 const mine=()=>{
   const l=prods.filter(p=>p.seller_id==me.id);
   return `<h4>Item saya</h4>`+(l.map(p=>`<div class="row" onclick="openP(${p.id})"><img src="${esc(p.image_url)}" alt="" onerror="this.style.visibility='hidden'"><div style="flex:1"><b>${esc(p.name)}</b><small>${rp(p.price)} · stok ${p.stock}</small></div><button class="btn" style="width:auto;margin:0;padding:8px 12px;${RED}" onclick="event.stopPropagation();delProd(${p.id})">Hapus</button></div>`).join('')||empty('Belum ada item. Tambah lewat form di atas.'));
 };
 async function editProd(id){
-  const row={name:$('#en').value.trim(),price:+$('#ep').value,stock:+$('#es').value,image_url:$('#ei').value.trim(),description:$('#edd').value.trim()};
+  const row={name:$('#en').value.trim(),price:+$('#ep').value,stock:+$('#es').value,image_url:$('#ei').value.trim(),description:$('#edd').value.trim(),payment_qr_url:$('#eq').value.trim()||null};
   if(prof.role=='admin'&&$('#ed'))row.discount_percent=Math.min(100,Math.max(0,+$('#ed').value||0));
   if(!row.name||!row.price)return toast('Isi nama dan harga');
   const{error}=await SB.from('products').update(row).eq('id',id);
@@ -218,8 +219,9 @@ async function addCat(){
   await load();toast('Kategori ditambahkan');render();
 }
 async function addProd(){
-  const row={seller_id:me.id,category_id:+$('#pc').value,name:$('#pn').value.trim(),price:+$('#pp').value,stock:+$('#ps').value,image_url:$('#pi').value.trim(),description:$('#pd').value.trim()};
+  const row={seller_id:me.id,category_id:+$('#pc').value,name:$('#pn').value.trim(),price:+$('#pp').value,stock:+$('#ps').value,image_url:$('#pi').value.trim(),description:$('#pd').value.trim(),payment_qr_url:$('#pq').value.trim()||null};
   if(!row.category_id||!row.name||!row.price)return toast('Isi kategori, nama, dan harga');
+  if(!row.payment_qr_url)return toast('Upload QR pembayaran dulu');
   const{error}=await SB.from('products').insert(row);
   if(error)return toast(error.message);
   await load();toast('Item ditambahkan');render();
@@ -324,18 +326,18 @@ async function chatV(){
   if(chatTo){
     const o=uinfo[me.id==chatTo.b?chatTo.s:chatTo.b];
     setTimeout(()=>{drawMsgs();chatT=setInterval(drawMsgs,4000)},0);
-    return `<button class="btn alt" onclick="chatTo=null;render()">‹ Kembali</button><div class="who sel">${av(o)}<b>${esc(o?.name||'Pengguna')}</b></div><div id="msgs"></div><div class="urow"><input id="mi" placeholder="Tulis pesan" onkeydown="if(event.key=='Enter')sendMsg()"><button class="btn" style="${B2}" onclick="sendMsg()">Kirim</button></div>`;
+    return `<button class="btn alt" onclick="chatTo=null;render()">‹ Kembali</button><div class="who sel">${av(o)}<b>${esc(o?.name||'Pengguna')}</b></div><div id="msgs"></div><div class="urow"><input id="mi" style="flex:1;min-width:0" placeholder="Tulis pesan" onkeydown="if(event.key=='Enter')sendMsg()"><label class="btn alt" style="${B2}">Gambar<input type="file" accept="image/*" onchange="sendImg(this)" hidden></label><button class="btn" style="${B2}" onclick="sendMsg()">Kirim</button></div>`;
   }
   const{data}=await SB.from('messages').select('*').order('created_at',{ascending:false});
   const seen={},rows=[];
   (data||[]).forEach(m=>{const o=m.buyer_id==me.id?m.seller_id:m.buyer_id;if(!seen[o]){seen[o]=1;rows.push([o,m])}});
-  return `<h3>Chat</h3><br>`+(rows.map(([o,m])=>`<div class="row" onclick="chatTo={b:${m.buyer_id==me.id?`'${me.id}'`:`'${m.buyer_id}'`},s:'${m.seller_id}'};render()">${av(uinfo[o])}<div><b>${esc(uinfo[o]?.name||'Pengguna')}</b><small>${esc(m.body.slice(0,40))}</small></div></div>`).join('')||empty('Belum ada chat. Buka item lalu tekan Chat penjual.'));
+  return `<h3>Chat</h3><br>`+(rows.map(([o,m])=>`<div class="row" onclick="chatTo={b:${m.buyer_id==me.id?`'${me.id}'`:`'${m.buyer_id}'`},s:'${m.seller_id}'};render()">${av(uinfo[o])}<div><b>${esc(uinfo[o]?.name||'Pengguna')}</b><small>${esc(m.body?m.body.slice(0,40):'Gambar')}</small></div></div>`).join('')||empty('Belum ada chat. Buka item lalu tekan Chat penjual.'));
 }
 async function drawMsgs(){
   const e=$('#msgs');if(!e||!chatTo)return;
   const{data}=await SB.from('messages').select('*').eq('buyer_id',chatTo.b).eq('seller_id',chatTo.s).order('created_at');
   const atEnd=e.scrollHeight-e.scrollTop-e.clientHeight<60;
-  e.innerHTML=(data||[]).map(m=>`<div class="msg ${m.sender_id==me.id?'me':''}">${esc(m.body)}</div>`).join('')||empty('Belum ada pesan.');
+  e.innerHTML=(data||[]).map(m=>`<div class="msg ${m.sender_id==me.id?'me':''}">${m.image_url?`<img class="mimg" src="${esc(m.image_url)}" alt="Gambar" onclick="window.open(this.src)">`:''}${esc(m.body)}</div>`).join('')||empty('Belum ada pesan.');
   if(atEnd)e.scrollTop=e.scrollHeight;
 }
 async function sendMsg(){
@@ -343,6 +345,26 @@ async function sendMsg(){
   const{error}=await SB.from('messages').insert({buyer_id:chatTo.b,seller_id:chatTo.s,sender_id:me.id,body});
   if(error)return toast(error.message);
   i.value='';drawMsgs();
+}
+function payPop(p,o){
+  const u=p.payment_qr_url;
+  modal(`<h3>Bayar pesanan</h3><p class="pr">${rp(o.amount)}</p>${u?`<img src="${esc(u)}" alt="QR pembayaran" style="background:#fff;max-height:300px;object-fit:contain">`:'<p class="mut">Penjual belum menambahkan QR pembayaran. Hubungi penjual lewat chat.</p>'}<small>Screenshot atau unduh QR ini, bayar sesuai nominal, lalu kirim bukti pembayaran lewat chat penjual.</small>${u?`<button class="btn alt" onclick="dlQR('${esc(u)}')">Unduh QR</button>`:''}<button class="btn" onclick="openChat('${p.seller_id}')">Chat penjual</button><button class="btn alt" onclick="go('transaksi')">Lihat transaksi</button>`);
+}
+async function dlQR(u){
+  try{const b=await(await fetch(u)).blob(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='qr-pembayaran.png';a.click()}
+  catch(e){window.open(u,'_blank')}
+}
+async function sendImg(el){
+  const f=el.files[0];if(!f)return;
+  if(f.size>5*1024*1024)return toast('Ukuran gambar maksimal 5 MB');
+  toast('Mengirim gambar...');
+  const pt='chat/'+me.id+'/'+Date.now()+'.'+(f.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const{error}=await SB.storage.from('images').upload(pt,f,{contentType:f.type});
+  if(error)return toast(error.message);
+  const url=SB.storage.from('images').getPublicUrl(pt).data.publicUrl;
+  const r=await SB.from('messages').insert({buyer_id:chatTo.b,seller_id:chatTo.s,sender_id:me.id,body:'',image_url:url});
+  if(r.error)return toast(r.error.message);
+  el.value='';drawMsgs();
 }
 setInterval(()=>{
   const e=$('.bn');
