@@ -215,7 +215,7 @@ async function addProd(){
   await load();toast('Item ditambahkan');render();
 }
 const discBox=()=>`<h3>Diskon kategori</h3><select id="dc">${cats.map(c=>`<option value="${c.id}">${esc(path(c))} (${c.discount_percent||0}%)</option>`).join('')}</select><input id="dp" type="number" min="0" max="100" placeholder="Diskon (%), isi 0 untuk menghapus"><button class="btn" onclick="setDisc()">Simpan diskon</button><small>Berlaku ke semua sub-kategori dan item di dalamnya. Diskon per item diatur dari popup item.</small>`;
-const catsBox=()=>`<h3>Kelola kategori</h3>`+(cats.map(c=>`<div class="uc"><input id="cnm${c.id}" value="${esc(c.name)}" placeholder="Nama"><label class="btn alt">Ganti gambar<input type="file" accept="image/*" onchange="upImg(this,'cim${c.id}')" hidden></label><input id="cim${c.id}" value="${esc(c.image_url||'')}" placeholder="Link gambar"><div class="urow"><button class="btn" style="${B2}" onclick="saveCat(${c.id})">Simpan</button><button class="btn" style="${B2};${RED}" onclick="delCat(${c.id})">Hapus</button></div></div>`).join('')||empty('Belum ada kategori.'));
+const catsBox=()=>`<h3>Kelola kategori</h3>`+(cats.map(c=>`<div class="uc"><small>${esc(path(c))}</small><input id="cnm${c.id}" value="${esc(c.name)}" placeholder="Nama"><label class="btn alt">Ganti gambar<input type="file" accept="image/*" onchange="upImg(this,'cim${c.id}')" hidden></label><input id="cim${c.id}" value="${esc(c.image_url||'')}" placeholder="Link gambar"><div class="urow"><button class="btn" style="${B2}" onclick="saveCat(${c.id})">Simpan</button><button class="btn" style="${B2};${RED}" onclick="delCat(${c.id})">Hapus</button></div></div>`).join('')||empty('Belum ada kategori.'));
 async function bannerBox(){
   const{data:b}=await SB.from('banners').select('*').order('sort').order('id');
   return `<h3>Banner promo</h3><label class="btn alt">Upload banner<input type="file" accept="image/*" onchange="addBanner(this)" hidden></label>`+(b||[]).map(x=>`<div class="row"><img src="${esc(x.image_url)}" alt=""><div style="flex:1"><small>Banner ${x.id}</small></div><button class="btn" style="width:auto;margin:0;padding:8px 12px;${RED}" onclick="delBanner(${x.id})">Hapus</button></div>`).join('');
@@ -230,9 +230,15 @@ async function saveCat(id){
   await load();toast('Kategori disimpan');render();
 }
 async function delCat(id){
-  if(!confirm('Hapus kategori ini beserta sub-kategorinya?'))return;
-  const{error}=await SB.from('categories').delete().eq('id',id);
-  if(error)return toast(error.code=='23503'?'Kategori masih berisi item. Hapus atau pindahkan item dulu.':error.message);
+  const ids=within(id),n=prods.filter(p=>ids.includes(p.category_id)).length,sub=ids.length-1;
+  const nm=cats.find(c=>c.id==id)?.name;
+  if(n>0){
+    if(!confirm('Yakin ingin menghapus kategori "'+nm+'"?'))return;
+    if(!confirm('Kategori ini masih berisi '+n+' item'+(sub?' dan '+sub+' sub-kategori':'')+'. Yakin ingin menghapus?'))return;
+    if(!confirm('Verifikasi terakhir: semua isinya ikut terhapus dan tidak bisa dikembalikan. Hapus sekarang?'))return;
+  }
+  const{error}=await SB.rpc('delete_category',{cid:id,force:n>0});
+  if(error)return toast(error.message);
   await load();toast('Kategori dihapus');render();
 }
 const B2='width:auto;margin:0;padding:10px 12px';
