@@ -392,7 +392,7 @@ async function chatV(){
   if(chatTo){
     const o=uinfo[me.id==chatTo.b?chatTo.s:chatTo.b];
     setTimeout(()=>{drawMsgs(true);chatT=setInterval(drawMsgs,4000)},0);
-    return `<div class="ctop"><button class="ic" onclick="chatTo=null;render()" aria-label="Kembali">${ARW}</button>${av(o)}<div><b>${esc(o?.name||'Pengguna')}</b><small>Tekan lama pesanmu untuk menghapus</small></div></div><div id="msgs"></div><div class="cbar"><label class="ic plus" aria-label="Kirim gambar">${PLUS}<input type="file" accept="image/*" onchange="sendImg(this)" hidden></label><input id="mi" placeholder="Tulis pesan" onkeydown="if(event.key=='Enter')sendMsg()"><button class="ic send" onclick="sendMsg()" aria-label="Kirim">${SEND}</button></div>`;
+    return `<div class="ctop"><button class="ic" onclick="chatTo=null;render()" aria-label="Kembali">${ARW}</button>${av(o)}<div><b>${esc(o?.name||'Pengguna')}</b><small>Ketuk pesanmu untuk menghapus</small></div></div><div id="msgs"></div><div class="cbar"><label class="ic plus" aria-label="Kirim gambar">${PLUS}<input type="file" accept="image/*" onchange="sendImg(this)" hidden></label><input id="mi" placeholder="Tulis pesan" onkeydown="if(event.key=='Enter')sendMsg()"><button class="ic send" onclick="sendMsg()" aria-label="Kirim">${SEND}</button></div>`;
   }
   await refreshChatBadge();
   const{data}=await SB.from('messages').select('*').order('created_at',{ascending:false});
@@ -403,17 +403,24 @@ async function chatV(){
 async function drawMsgs(first){
   const e=$('#msgs');if(!e||!chatTo)return;
   const{data}=await SB.from('messages').select('*').eq('buyer_id',chatTo.b).eq('seller_id',chatTo.s).order('created_at');
+  msgs=data||[];
   const inc=(data||[]).filter(m=>m.sender_id!=me.id).pop();
   if(inc){markRead(me.id==chatTo.b?chatTo.s:chatTo.b,inc.created_at);refreshChatBadge()}
   const atEnd=first===true||innerHeight+scrollY>=document.body.scrollHeight-140;
-  e.innerHTML=(data||[]).map(m=>{const me_=m.sender_id==me.id;return `<div class="msg ${me_?'me':''}" ${me_?`oncontextmenu="delMsg(${m.id});return false"`:''}>${m.image_url?`<img class="mimg" src="${esc(m.image_url)}" alt="Gambar" onclick="window.open(this.src)">`:''}${esc(m.body)}</div>`}).join('')||empty('Belum ada pesan.');
+  e.innerHTML=(data||[]).map(m=>{const me_=m.sender_id==me.id;return `<div class="msg ${me_?'me':''}" ${me_?`onclick="msgMenu(${m.id})"`:''}>${m.image_url?`<img class="mimg" src="${esc(m.image_url)}" alt="Gambar" ${me_?'':'onclick="window.open(this.src)"'}>`:''}${esc(m.body)}</div>`}).join('')||empty('Belum ada pesan.');
   if(atEnd)scrollTo(0,document.body.scrollHeight);
 }
+let msgs=[];
+function msgMenu(id){
+  const m=msgs.find(x=>x.id==id);if(!m)return;
+  modal(`<h3>Pesan</h3>${m.image_url?`<img src="${esc(m.image_url)}" alt="Gambar">`:''}${m.body?`<p style="margin:8px 0">${esc(m.body)}</p>`:''}<button class="btn" style="${RED}" onclick="delMsg(${m.id})">Hapus pesan</button>`);
+}
 async function delMsg(id){
-  if(!confirm('Hapus pesan ini?'))return;
-  const{error}=await SB.from('messages').delete().eq('id',id);
+  const{data,error}=await SB.from('messages').delete().eq('id',id).select();
+  closeM();
   if(error)return toast(error.message);
-  drawMsgs();
+  if(!data?.length)return toast('Gagal menghapus. Jalankan SQL izin hapus chat di Supabase.');
+  toast('Pesan dihapus');drawMsgs();
 }
 async function sendMsg(){
   const i=$('#mi'),body=i.value.trim();if(!body)return;
