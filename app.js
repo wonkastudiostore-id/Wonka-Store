@@ -1,6 +1,8 @@
 const SB=supabase.createClient('https://ynchtzndogltyziitrqv.supabase.co','sb_publishable_30G6TknbWIajO8ewUpkAaw_DiRbErX1');
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SU='https://ynchtzndogltyziitrqv.supabase.co/storage/v1/object/public/images/';
+const safeUrl=u=>String(u||'').startsWith(SU)?u:'';
 const rp=n=>'Rp'+Number(n||0).toLocaleString('id-ID');
 let me=null,prof=null,cats=[],prods=[],orders=[],sellers={},uinfo={},authMode=null,chatTo=null,chatT=null,banners=[],perms=['cat','item','mine'],users=[],tab='home',cat=null,q='';
 
@@ -30,8 +32,11 @@ async function load(){
   try{const v=JSON.parse(pm.data?.value);if(Array.isArray(v))perms=v}catch(e){}
 }
 async function init(){
-  const{data:{session}}=await SB.auth.getSession();
-  await setUser(session?.user);await load();render();
+  try{
+    const{data:{session}}=await SB.auth.getSession();
+    await setUser(session?.user);await load();
+  }catch(e){toast('Gagal terhubung. Periksa internet lalu muat ulang.')}
+  render();
 }
 async function render(){
   clearInterval(chatT);closeM();
@@ -49,12 +54,12 @@ const path=c=>c.parent_id?path(cats.find(x=>x.id==c.parent_id)||{name:'?'})+' �
 function disc(p){return p.discount_percent||0}
 const fp=p=>Math.round(p.price*(100-disc(p))/100);
 const priceH=p=>disc(p)?`<span class="pr">${rp(fp(p))}</span> <small style="display:inline"><s>${rp(p.price)}</s> −${disc(p)}%</small>`:`<span class="pr">${rp(p.price)}</span>`;
-const card=p=>`<div class="card" onclick="openP(${p.id})"><img src="${esc(p.image_url)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><div class="n">${esc(p.name)}</div><div>${priceH(p)}</div><small>Terjual ${p.sold_count||0}</small></div>`;
+const card=p=>`<div class="card" onclick="openP(${p.id})"><img src="${esc(safeUrl(p.image_url))}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><div class="n">${esc(p.name)}</div><div>${priceH(p)}</div><small>Terjual ${p.sold_count||0}</small></div>`;
 const empty=t=>`<p class="mut">${t}</p>`;
 
 function bannerH(){
   if(!banners.length)return `<div class="banner"><b>Tiket emas minggu ini</b><span>Diskon dan event terbaru tampil di sini.</span></div>`;
-  return `<div class="bn">${banners.map(b=>`<img src="${esc(b.image_url)}" alt="Banner promo">`).join('')}</div>`;
+  return `<div class="bn">${banners.map(b=>`<img src="${esc(safeUrl(b.image_url))}" alt="Banner promo">`).join('')}</div>`;
 }
 function home(){
   const k=q.toLowerCase(),ids=cat?within(cat):null,cur=cats.find(c=>c.id==cat);
@@ -64,19 +69,20 @@ function home(){
   if(cur)h+=`<button class="btn alt" onclick="cat=${cur.parent_id||'null'};render()">‹ Kembali dari ${esc(cur.name)}</button>`;
   if(cat||k)h+=sec(cur?esc(cur.name):'Hasil pencarian',`<div class="grid">${list.map(card).join('')||empty('Item tidak ditemukan.')}</div>`);
   else h+=sec('Top Seller',`<div class="scroll">${prods.slice(0,8).map(card).join('')||empty('Belum ada item. Seller bisa menambah item di tab Akun.')}</div>`);
-  h+=sec(cur?'Sub-kategori':'Kategori',`<div class="cats">${cl.map(c=>`<button class="cat" onclick="cat=${c.id};q='';$('#q').value='';render()">${c.image_url?`<img src="${esc(c.image_url)}" alt="" loading="lazy">`:''}${esc(c.name)}</button>`).join('')||empty(cur?'Tidak ada sub-kategori.':'Belum ada kategori.')}</div>`);
+  h+=sec(cur?'Sub-kategori':'Kategori',`<div class="cats">${cl.map(c=>`<button class="cat" onclick="cat=${c.id};q='';$('#q').value='';render()">${c.image_url?`<img src="${esc(safeUrl(c.image_url))}" alt="" loading="lazy">`:''}${esc(c.name)}</button>`).join('')||empty(cur?'Tidak ada sub-kategori.':'Belum ada kategori.')}</div>`);
   return h;
 }
 
 function openP(id){
   const p=prods.find(x=>x.id==id),sl=sellers[p.seller_id];
-  modal(`<img src="${esc(p.image_url)}" alt="" onerror="this.remove()"><h3>${esc(p.name)}</h3><p>${priceH(p)}</p><small>Stok ${p.stock}</small>${p.description?`<p style="margin:10px 0">${esc(p.description)}</p>`:''}${p.seller_id?`<div class="who sel">${av(sl)}<div><b>${esc(sl?.name||'Penjual')}</b><small>Penjual · ${starsH(ratings[p.seller_id])}</small></div></div>`:''}<button class="btn" onclick="buy(${p.id})">Beli sekarang</button>${p.seller_id&&p.seller_id!=me?.id?`<button class="btn alt" onclick="openChat('${p.seller_id}')">Chat penjual</button>`:''}`+manage(p));
+  modal(`<img src="${esc(safeUrl(p.image_url))}" alt="" onerror="this.remove()"><h3>${esc(p.name)}</h3><p>${priceH(p)}</p><small>Stok ${p.stock}</small>${p.description?`<p style="margin:10px 0">${esc(p.description)}</p>`:''}${p.seller_id?`<div class="who sel">${av(sl)}<div><b>${esc(sl?.name||'Penjual')}</b><small>Penjual · ${starsH(ratings[p.seller_id])}</small></div></div>`:''}<button class="btn" onclick="buy(${p.id})">Beli sekarang</button>${p.seller_id&&p.seller_id!=me?.id?`<button class="btn alt" onclick="openChat('${p.seller_id}')">Chat penjual</button>`:''}`+manage(p));
 }
 async function buy(id){
   if(!me){modal(`<h3>Login diperlukan</h3><p style="margin:8px 0">Untuk membeli, kamu harus masuk jika sudah punya akun. Jika belum punya akun, silakan daftar atau buat akun dulu.</p><button class="btn" onclick="authMode='masuk';go('akun')">Masuk</button><button class="btn alt" onclick="authMode='daftar';go('akun')">Daftar</button>`);return}
   const p=prods.find(x=>x.id==id);
   if(p.stock<1)return toast('Stok habis');
-  const{data,error}=await SB.from('orders').insert({buyer_id:me.id,seller_id:p.seller_id,product_id:p.id,amount:fp(p)}).select().single();
+  if(window._b)return;window._b=true;setTimeout(()=>{window._b=false},3000);
+  const{data,error}=await SB.from('orders').insert({buyer_id:me.id,product_id:p.id}).select().single();
   if(error)return toast(error.message);
   toast('Pesanan dibuat');payPop(p,data);
 }
@@ -91,7 +97,7 @@ async function trx(){
   rated=new Set((rv||[]).map(r=>r.order_id));
   const l=orders.filter(o=>tf=='all'||o.status==tf);
   const chips=[['all','Semua'],...Object.entries(ST)].map(([k,v])=>`<button class="chip ${tf==k?'on':''}" onclick="tf='${k}';render()">${v}</button>`).join('');
-  return `<div class="chips">${chips}</div>`+(l.map(o=>`<div class="row" onclick="openO(${o.id})"><img src="${esc(o.products?.image_url)}" alt="" onerror="this.style.visibility='hidden'"><div><b>${esc(o.products?.name||'Item dihapus')}</b><small>${rp(o.amount)} · ${ST[o.status]||esc(o.status)} · ${o.buyer_id==me.id?'Beli':'Jual'}</small></div></div>`).join('')||empty('Belum ada transaksi di status ini.'));
+  return `<div class="chips">${chips}</div>`+(l.map(o=>`<div class="row" onclick="openO(${o.id})"><img src="${esc(safeUrl(o.products?.image_url))}" alt="" onerror="this.style.visibility='hidden'"><div><b>${esc(o.products?.name||'Item dihapus')}</b><small>${rp(o.amount)} · ${ST[o.status]||esc(o.status)} · ${o.buyer_id==me.id?'Beli':'Jual'}</small></div></div>`).join('')||empty('Belum ada transaksi di status ini.'));
 }
 function openO(id){
   const o=orders.find(x=>x.id==id),buyer=o.buyer_id==me.id,sel=o.seller_id==me.id;
@@ -112,11 +118,6 @@ async function confirmO(id){
   const{error}=await SB.rpc('confirm_order',{oid:id});
   if(error)return toast(error.message);
   closeM();await load();await setUser(me);toast('Uang diterima, lanjut kirim pesanan');render();
-}
-async function coin(uid,n,note){
-  const{data:u}=await SB.from('profiles').select('coins').eq('id',uid).single();
-  await SB.from('profiles').update({coins:(u?.coins||0)+n}).eq('id',uid);
-  await SB.from('coin_log').insert({user_id:uid,change:n,note});
 }
 
 function auth(msg){
@@ -140,7 +141,7 @@ async function signup(){
 }
 async function logout(){await SB.auth.signOut();await setUser(null);render()}
 
-const av=u=>u?.avatar_url?`<img class="av" src="${esc(u.avatar_url)}" alt="">`:`<div class="av">${esc((u?.name||'?').slice(0,1).toUpperCase())}</div>`;
+const av=u=>u?.avatar_url?`<img class="av" src="${esc(safeUrl(u.avatar_url))}" alt="">`:`<div class="av">${esc((u?.name||'?').slice(0,1).toUpperCase())}</div>`;
 async function saveName(){
   const v=$('#pnm').value.trim();if(!v)return toast('Nama wajib diisi');
   const{error}=await SB.from('profiles').update({name:v}).eq('id',me.id);
@@ -176,7 +177,7 @@ function chatAdmin(){
   chatTo={b:me.id,s:a.id};go('chat');
 }
 async function openBox(k){
-  const f={cat:catForm,item:itemForm,mine,disc:discBox,cats:catsBox,banner:bannerBox,users:usersBox,perm:permBox}[k];
+  const f={cat:catForm,item:itemForm,mine,cats:catsBox,banner:bannerBox,users:usersBox,perm:permBox}[k];
   modal(await f());
 }
 async function akun(){
@@ -202,10 +203,10 @@ async function upImg(el,target){
   toast('Gambar terunggah. Lanjut simpan item.');
 }
 const RED='background:#b3261e;color:#fff';
-const manage=p=>(prof&&prof.role!='buyer'&&(prof.role=='admin'||p.seller_id==me?.id))?`<h4>Atur item</h4><input id="en" value="${esc(p.name)}" placeholder="Nama item"><input id="ep" type="number" value="${p.price}" placeholder="Harga"><input id="es" type="number" value="${p.stock}" placeholder="Stok"><input id="edd" value="${esc(p.description||'')}" placeholder="Deskripsi"><label class="btn alt">Ganti foto<input id="ef" type="file" accept="image/*" onchange="upImg(this,'ei')" hidden></label><input id="ei" value="${esc(p.image_url)}" placeholder="Link gambar"><label class="btn alt">Ganti QR pembayaran<input type="file" accept="image/*" onchange="upImg(this,'eq')" hidden></label><input id="eq" value="${esc(p.payment_qr_url||'')}" placeholder="Link QR pembayaran"><input id="ed" type="number" min="0" max="100" value="${p.discount_percent||0}" placeholder="Diskon item (%)"><button class="btn alt" onclick="editProd(${p.id})">Simpan perubahan</button><button class="btn" style="${RED}" onclick="delProd(${p.id})">Hapus item</button>`:'';
+const manage=p=>(prof&&prof.role!='buyer'&&(prof.role=='admin'||p.seller_id==me?.id))?`<h4>Atur item</h4><input id="en" value="${esc(p.name)}" placeholder="Nama item"><input id="ep" type="number" value="${p.price}" placeholder="Harga"><input id="es" type="number" value="${p.stock}" placeholder="Stok"><input id="edd" value="${esc(p.description||'')}" placeholder="Deskripsi"><label class="btn alt">Ganti foto<input id="ef" type="file" accept="image/*" onchange="upImg(this,'ei')" hidden></label><input id="ei" value="${esc(safeUrl(p.image_url))}" placeholder="Link gambar"><label class="btn alt">Ganti QR pembayaran<input type="file" accept="image/*" onchange="upImg(this,'eq')" hidden></label><input id="eq" value="${esc(safeUrl(p.payment_qr_url||''))}" placeholder="Link QR pembayaran"><input id="ed" type="number" min="0" max="100" value="${p.discount_percent||0}" placeholder="Diskon item (%)"><button class="btn alt" onclick="editProd(${p.id})">Simpan perubahan</button><button class="btn" style="${RED}" onclick="delProd(${p.id})">Hapus item</button>`:'';
 const mine=()=>{
   const l=prods.filter(p=>p.seller_id==me.id);
-  return `<h3>Item saya</h3><br>`+(l.map(p=>`<div class="uc"><div class="who" onclick="openP(${p.id})" style="cursor:pointer"><img class="av" style="border-radius:10px" src="${esc(p.image_url)}" alt="" onerror="this.style.visibility='hidden'"><div style="flex:1"><b>${esc(p.name)}</b><small>${priceH(p)} · stok ${p.stock}</small></div></div><div class="urow" style="margin-top:8px"><small>Diskon ${disc(p)}%</small><div class="urow"><button class="btn alt" style="${B2}" onclick="stepDisc(${p.id},-10)">−10%</button><button class="btn alt" style="${B2}" onclick="stepDisc(${p.id},10)">+10%</button></div></div><div class="urow" style="margin-top:6px"><button class="btn alt" style="${B2}" onclick="stepDisc(${p.id},0)">Hapus diskon</button><button class="btn" style="${B2};${RED}" onclick="delProd(${p.id})">Hapus item</button></div></div>`).join('')||empty('Belum ada item. Tambah lewat kotak Tambah item.'));
+  return `<h3>Item saya</h3><br>`+(l.map(p=>`<div class="uc"><div class="who" onclick="openP(${p.id})" style="cursor:pointer"><img class="av" style="border-radius:10px" src="${esc(safeUrl(p.image_url))}" alt="" onerror="this.style.visibility='hidden'"><div style="flex:1"><b>${esc(p.name)}</b><small>${priceH(p)} · stok ${p.stock}</small></div></div><div class="urow" style="margin-top:8px"><small>Diskon ${disc(p)}%</small><div class="urow"><button class="btn alt" style="${B2}" onclick="stepDisc(${p.id},-10)">−10%</button><button class="btn alt" style="${B2}" onclick="stepDisc(${p.id},10)">+10%</button></div></div><div class="urow" style="margin-top:6px"><button class="btn alt" style="${B2}" onclick="stepDisc(${p.id},0)">Hapus diskon</button><button class="btn" style="${B2};${RED}" onclick="delProd(${p.id})">Hapus item</button></div></div>`).join('')||empty('Belum ada item. Tambah lewat kotak Tambah item.'));
 };
 async function stepDisc(id,d){
   const p=prods.find(x=>x.id==id),v=d==0?0:Math.min(100,Math.max(0,(p.discount_percent||0)+d));
@@ -241,11 +242,10 @@ async function addProd(){
   if(error)return toast(error.message);
   await load();toast('Item ditambahkan');render();
 }
-const discBox=()=>`<h3>Diskon kategori</h3><select id="dc">${cats.map(c=>`<option value="${c.id}">${esc(path(c))} (${c.discount_percent||0}%)</option>`).join('')}</select><input id="dp" type="number" min="0" max="100" placeholder="Diskon (%), isi 0 untuk menghapus"><button class="btn" onclick="setDisc()">Simpan diskon</button><small>Berlaku ke semua sub-kategori dan item di dalamnya. Diskon per item diatur dari popup item.</small>`;
-const catsBox=()=>`<h3>Kelola kategori</h3>`+(cats.map(c=>`<div class="uc"><small>${esc(path(c))}</small><input id="cnm${c.id}" value="${esc(c.name)}" placeholder="Nama"><label class="btn alt">Ganti gambar<input type="file" accept="image/*" onchange="upImg(this,'cim${c.id}')" hidden></label><input id="cim${c.id}" value="${esc(c.image_url||'')}" placeholder="Link gambar"><div class="urow"><button class="btn" style="${B2}" onclick="saveCat(${c.id})">Simpan</button><button class="btn" style="${B2};${RED}" onclick="delCat(${c.id})">Hapus</button></div></div>`).join('')||empty('Belum ada kategori.'));
+const catsBox=()=>`<h3>Kelola kategori</h3>`+(cats.map(c=>`<div class="uc"><small>${esc(path(c))}</small><input id="cnm${c.id}" value="${esc(c.name)}" placeholder="Nama"><label class="btn alt">Ganti gambar<input type="file" accept="image/*" onchange="upImg(this,'cim${c.id}')" hidden></label><input id="cim${c.id}" value="${esc(safeUrl(c.image_url||''))}" placeholder="Link gambar"><div class="urow"><button class="btn" style="${B2}" onclick="saveCat(${c.id})">Simpan</button><button class="btn" style="${B2};${RED}" onclick="delCat(${c.id})">Hapus</button></div></div>`).join('')||empty('Belum ada kategori.'));
 async function bannerBox(){
   const{data:b}=await SB.from('banners').select('*').order('sort').order('id');
-  return `<h3>Banner promo</h3><label class="btn alt">Upload banner<input type="file" accept="image/*" onchange="addBanner(this)" hidden></label>`+(b||[]).map(x=>`<div class="row"><img src="${esc(x.image_url)}" alt=""><div style="flex:1"><small>Banner ${x.id}</small></div><button class="btn" style="width:auto;margin:0;padding:8px 12px;${RED}" onclick="delBanner(${x.id})">Hapus</button></div>`).join('');
+  return `<h3>Banner promo</h3><label class="btn alt">Upload banner<input type="file" accept="image/*" onchange="addBanner(this)" hidden></label>`+(b||[]).map(x=>`<div class="row"><img src="${esc(safeUrl(x.image_url))}" alt=""><div style="flex:1"><small>Banner ${x.id}</small></div><button class="btn" style="width:auto;margin:0;padding:8px 12px;${RED}" onclick="delBanner(${x.id})">Hapus</button></div>`).join('');
 }
 async function usersBox(){
   const{data:u}=await SB.from('profiles').select('*').order('name');users=u||[];
@@ -269,7 +269,7 @@ async function delCat(id){
   await load();toast('Kategori dihapus');render();
 }
 const B2='width:auto;margin:0;padding:10px 12px';
-const usersH=()=>{const k=(document.getElementById('us')?.value||'').toLowerCase();return users.filter(u=>!k||(u.name||'').toLowerCase().includes(k)).map(u=>`<div class="uc"><div class="urow"><b>${esc(u.name||u.id.slice(0,8))}</b>${u.role=='admin'?'<small>Admin</small>':`<select onchange="setRole('${u.id}',this.value)">${['buyer','seller'].map(r=>`<option ${u.role==r?'selected':''}>${r}</option>`).join('')}</select>`}</div>`+(u.role!='buyer'?`<small>Koin ${rp(u.coins)} · bagi hasil ${u.share_percent}%</small><div class="urow"><input id="sp${u.id}" type="number" min="0" max="100" value="${u.share_percent}"><button class="btn" style="${B2}" onclick="saveShare('${u.id}')">Simpan %</button></div><div class="urow"><input id="cc${u.id}" type="number" min="1" placeholder="Jumlah koin"></div><div class="urow"><button class="btn" style="${B2}" onclick="adjCoin('${u.id}',1)">Tambah</button><button class="btn alt" style="${B2}" onclick="adjCoin('${u.id}',-1)">Kurangi</button></div>`:'')+(u.role=='seller'?`<button class="btn" style="${RED}" onclick="blockU('${u.id}')">Blok seller</button>`:'')+(u.blocked?`<small>Akun diblokir</small><button class="btn alt" onclick="unblockU('${u.id}')">Buka blokir</button>`:'')+(u.id!=me.id?`<button class="btn" style="${RED}" onclick="delUser('${u.id}')">Hapus akun permanen</button>`:'')+`</div>`).join('')||empty('Akun tidak ditemukan.')};
+const usersH=()=>{const k=(document.getElementById('us')?.value||'').toLowerCase();return users.filter(u=>!k||(u.name||'').toLowerCase().includes(k)).map(u=>`<div class="uc"><div class="urow"><b>${esc(u.name||u.id.slice(0,8))}</b>${u.role=='admin'?'<small>Admin</small>':`<select onchange="setRole('${u.id}',this.value)">${['buyer','seller'].map(r=>`<option ${u.role==r?'selected':''}>${r}</option>`).join('')}</select>`}</div>`+(u.role!='buyer'?`<small>Koin ${rp(u.coins)} · bagi hasil ${u.share_percent}%</small><div class="urow"><input id="sp${u.id}" type="number" min="0" max="100" value="${u.share_percent}"><button class="btn" style="${B2}" onclick="saveShare('${u.id}')">Simpan %</button></div><div class="urow"><input id="cc${u.id}" type="number" min="1" placeholder="Jumlah koin"></div><div class="urow"><button class="btn" style="${B2}" onclick="adjCoin('${u.id}',1)">Tambah</button><button class="btn alt" style="${B2}" onclick="adjCoin('${u.id}',-1)">Kurangi</button><button class="btn alt" style="${B2}" onclick="coinLog('${u.id}')">Riwayat</button></div>`:'')+(u.role=='seller'?`<button class="btn" style="${RED}" onclick="blockU('${u.id}')">Blok seller</button>`:'')+(u.blocked?`<small>Akun diblokir</small><button class="btn alt" onclick="unblockU('${u.id}')">Buka blokir</button>`:'')+(u.id!=me.id?`<button class="btn" style="${RED}" onclick="delUser('${u.id}')">Hapus akun permanen</button>`:'')+`</div>`).join('')||empty('Akun tidak ditemukan.')};
 const drawUsers=()=>{document.getElementById('ul').innerHTML=usersH()};
 async function saveShare(id){
   const v=Math.min(100,Math.max(0,+document.getElementById('sp'+id).value||0));
@@ -282,7 +282,9 @@ async function adjCoin(id,sg){
   if(!n)return toast('Isi jumlah koin');
   const u=users.find(x=>x.id==id);
   if((u.coins||0)+n<0)return toast('Koin tidak cukup');
-  await coin(id,n,sg>0?'Ditambah admin':'Dikurangi admin');u.coins=(u.coins||0)+n;drawUsers();toast(sg>0?'Koin ditambah':'Koin dikurangi');
+  const{error}=await SB.rpc('admin_adjust_coins',{uid:id,n,note:sg>0?'Ditambah admin':'Dikurangi admin'});
+  if(error)return toast(error.message);
+  u.coins=(u.coins||0)+n;drawUsers();toast(sg>0?'Koin ditambah':'Koin dikurangi');
 }
 async function delUser(id){
   if(!confirm('Hapus akun ini secara permanen? Tindakan ini tidak bisa dibatalkan.'))return;
@@ -309,7 +311,7 @@ async function addBanner(el){
   const{error}=await SB.storage.from('images').upload(pt,f,{contentType:f.type});
   if(error)return toast(error.message);
   const url=SB.storage.from('images').getPublicUrl(pt).data.publicUrl;
-  const r=await SB.from('banners').insert({image_url:url,sort:Date.now()%1000000});
+  const r=await SB.from('banners').insert({image_url:url});
   if(r.error)return toast(r.error.message);
   await load();toast('Banner ditambahkan');render();
 }
@@ -318,12 +320,6 @@ async function delBanner(id){
   const{error}=await SB.from('banners').delete().eq('id',id);
   if(error)return toast(error.message);
   await load();toast('Banner dihapus');render();
-}
-async function setDisc(){
-  const v=Math.min(100,Math.max(0,+$('#dp').value||0));
-  const{error}=await SB.from('categories').update({discount_percent:v}).eq('id',+$('#dc').value);
-  if(error)return toast(error.message);
-  await load();toast('Diskon disimpan');render();
 }
 
 async function setRole(id,role){
@@ -387,6 +383,11 @@ function toggleSearch(){
   const p=$('#sp'),open=p.classList.toggle('open');
   if(open)$('#q').focus();else{q='';$('#q').value='';render()}
 }
+async function coinLog(id){
+  const{data}=await SB.from('coin_log').select('*').eq('user_id',id).order('created_at',{ascending:false}).limit(30);
+  const u=users.find(x=>x.id==id);
+  modal(`<h3>Riwayat koin</h3><small>${esc(u?.name||'')}</small><br>`+((data||[]).map(x=>`<div class="row"><div style="flex:1"><b>${x.change>0?'+':'−'}${rp(Math.abs(x.change))}</b><small>${esc(x.note||'')} · ${new Date(x.created_at).toLocaleString('id-ID')}</small></div></div>`).join('')||empty('Belum ada riwayat.')));
+}
 function openChat(sid){
   if(!me){closeM();toast('Masuk dulu untuk chat');return go('akun')}
   chatTo={b:me.id,s:sid};closeM();go('chat');
@@ -397,8 +398,8 @@ async function chatV(){
   uinfo=Object.fromEntries((u||[]).map(x=>[x.id,x]));
   if(chatTo){
     const o=uinfo[me.id==chatTo.b?chatTo.s:chatTo.b];
-    setTimeout(()=>{drawMsgs(true);chatT=setInterval(drawMsgs,4000)},0);
-    return `<div class="ctop"><button class="ic" onclick="chatTo=null;render()" aria-label="Kembali">${ARW}</button>${av(o)}<div><b>${esc(o?.name||'Pengguna')}</b><small>Ketuk pesanmu untuk menghapus</small></div></div><div id="msgs"></div><div class="cbar"><label class="ic plus" aria-label="Kirim gambar">${PLUS}<input type="file" accept="image/*" onchange="sendImg(this)" hidden></label><input id="mi" placeholder="Tulis pesan" onkeydown="if(event.key=='Enter')sendMsg()"><button class="ic send" onclick="sendMsg()" aria-label="Kirim">${SEND}</button></div>`;
+    setTimeout(()=>{drawMsgs(true);chatT=setInterval(()=>{if(!document.hidden)drawMsgs()},4000)},0);
+    return `<div class="ctop"><button class="ic" onclick="chatTo=null;render()" aria-label="Kembali">${ARW}</button>${av(o)}<div><b>${esc(o?.name||'Pengguna')}</b><small>Ketuk pesanmu untuk menghapus</small></div></div><div id="msgs"></div><div class="cbar"><label class="ic plus" aria-label="Kirim gambar">${PLUS}<input type="file" accept="image/*" onchange="sendImg(this)" hidden></label><input id="mi" maxlength="2000" placeholder="Tulis pesan" onkeydown="if(event.key=='Enter')sendMsg()"><button class="ic send" onclick="sendMsg()" aria-label="Kirim">${SEND}</button></div>`;
   }
   await refreshChatBadge();
   const{data}=await SB.from('messages').select('*').order('created_at',{ascending:false});
@@ -413,7 +414,7 @@ async function drawMsgs(first){
   const inc=(data||[]).filter(m=>m.sender_id!=me.id).pop();
   if(inc){markRead(me.id==chatTo.b?chatTo.s:chatTo.b,inc.created_at);refreshChatBadge()}
   const atEnd=first===true||innerHeight+scrollY>=document.body.scrollHeight-140;
-  e.innerHTML=(data||[]).map(m=>{const me_=m.sender_id==me.id;return `<div class="msg ${me_?'me':''}" ${me_?`onclick="msgMenu(${m.id})"`:''}>${m.image_url?`<img class="mimg" src="${esc(m.image_url)}" alt="Gambar" ${me_?'':'onclick="window.open(this.src)"'}>`:''}${esc(m.body)}</div>`}).join('')||empty('Belum ada pesan.');
+  e.innerHTML=(data||[]).map(m=>{const me_=m.sender_id==me.id;return `<div class="msg ${me_?'me':''}" ${me_?`onclick="msgMenu(${m.id})"`:''}>${m.image_url?`<img class="mimg" src="${esc(safeUrl(m.image_url))}" alt="Gambar" ${me_?'':'onclick="openImg(this.src)"'}>`:''}${esc(m.body)}</div>`}).join('')||empty('Belum ada pesan.');
   if(atEnd)scrollTo(0,document.body.scrollHeight);
 }
 let msgs=[],ratings={},rated=new Set();
@@ -427,7 +428,7 @@ async function rate(id,n){
 }
 function msgMenu(id){
   const m=msgs.find(x=>x.id==id);if(!m)return;
-  modal(`<h3>Pesan</h3>${m.image_url?`<img src="${esc(m.image_url)}" alt="Gambar">`:''}${m.body?`<p style="margin:8px 0">${esc(m.body)}</p>`:''}<button class="btn" style="${RED}" onclick="delMsg(${m.id})">Hapus pesan</button>`);
+  modal(`<h3>Pesan</h3>${m.image_url?`<img src="${esc(safeUrl(m.image_url))}" alt="Gambar">`:''}${m.body?`<p style="margin:8px 0">${esc(m.body)}</p>`:''}<button class="btn" style="${RED}" onclick="delMsg(${m.id})">Hapus pesan</button>`);
 }
 async function delMsg(id){
   const{data,error}=await SB.from('messages').delete().eq('id',id).select();
@@ -443,12 +444,15 @@ async function sendMsg(){
   i.value='';drawMsgs();
 }
 function payPop(p,o){
-  const u=p.payment_qr_url;
-  modal(`<h3>Bayar pesanan</h3><p class="pr">${rp(o.amount)}</p>${u?`<img src="${esc(u)}" alt="QR pembayaran" style="background:#fff;max-height:300px;object-fit:contain">`:'<p class="mut">Penjual belum menambahkan QR pembayaran. Hubungi penjual lewat chat.</p>'}<small>Screenshot atau unduh QR ini, bayar sesuai nominal, lalu kirim bukti pembayaran lewat chat penjual.</small>${u?`<button class="btn alt" onclick="dlQR('${esc(u)}')">Unduh QR</button>`:''}<button class="btn" onclick="setSt(${o.id},'sent')">Saya sudah bayar</button><button class="btn alt" onclick="openChat('${p.seller_id}')">Chat penjual</button><button class="btn alt" onclick="go('transaksi')">Lihat transaksi</button>`);
+  const u=safeUrl(p.payment_qr_url);qrUrl=u;
+  modal(`<h3>Bayar pesanan</h3><p class="pr">${rp(o.amount)}</p>${u?`<img src="${esc(u)}" alt="QR pembayaran" style="background:#fff;max-height:300px;object-fit:contain">`:'<p class="mut">Penjual belum menambahkan QR pembayaran. Hubungi penjual lewat chat.</p>'}<small>Screenshot atau unduh QR ini, bayar sesuai nominal, lalu kirim bukti pembayaran lewat chat penjual.</small>${u?`<button class="btn alt" onclick="dlQR()">Unduh QR</button>`:''}<button class="btn" onclick="setSt(${o.id},'sent')">Saya sudah bayar</button><button class="btn alt" onclick="openChat('${p.seller_id}')">Chat penjual</button><button class="btn alt" onclick="go('transaksi')">Lihat transaksi</button>`);
 }
-async function dlQR(u){
+let qrUrl='';
+function openImg(u){if(safeUrl(u))window.open(u,'_blank','noopener')}
+async function dlQR(){
+  const u=qrUrl;if(!u)return;
   try{const b=await(await fetch(u)).blob(),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='qr-pembayaran.png';a.click()}
-  catch(e){window.open(u,'_blank')}
+  catch(e){window.open(u,'_blank','noopener')}
 }
 async function sendImg(el){
   const f=el.files[0];if(!f)return;
@@ -462,7 +466,7 @@ async function sendImg(el){
   if(r.error)return toast(r.error.message);
   el.value='';drawMsgs();
 }
-setInterval(()=>{refreshNotif();refreshChatBadge()},10000);
+setInterval(()=>{if(document.hidden)return;refreshNotif();refreshChatBadge()},10000);
 setInterval(()=>{
   const e=$('.bn');
   if(!e||banners.length<2||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
