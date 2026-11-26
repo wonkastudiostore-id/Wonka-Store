@@ -14,6 +14,7 @@ function go(t){tab=t;render();scrollTo(0,0)}
 async function setUser(u){
   me=u||null;prof=null;
   if(me){const{data}=await SB.from('profiles').select('*').eq('id',me.id).single();prof=data}
+  if(me&&prof){const a=accts();if(a[me.id]){a[me.id].name=prof.name;a[me.id].avatar=prof.avatar_url;putAccts(a)}}
   refreshNotif();refreshChatBadge();
 }
 async function load(){
@@ -36,7 +37,8 @@ async function load(){
 async function init(){
   try{
     const{data:{session}}=await SB.auth.getSession();
-    await setUser(session?.user);await load();
+    if(session&&await needMfa()){authMode='mfa';await setUser(null)}else await setUser(session?.user);
+    await load();
   }catch(e){toast('Gagal terhubung. Periksa internet lalu muat ulang.')}
   render();
 }
@@ -127,15 +129,17 @@ async function confirmO(id){
 }
 
 function auth(msg){
-  if(!authMode)return `<h3>Selamat datang</h3><small>${msg||'Masuk atau daftar untuk mulai belanja.'}</small><button class="btn" onclick="authMode='masuk';render()">Masuk</button><button class="btn alt" onclick="authMode='daftar';render()">Daftar</button>`;
+  if(authMode=='mfa')return `<h3>Verifikasi 2 langkah</h3><small>Masukkan 6 angka dari aplikasi autentikator di HP.</small><input id="mc" inputmode="numeric" maxlength="6" placeholder="6 angka" autocomplete="one-time-code"><button class="btn" onclick="mfaLogin()">Verifikasi</button><button class="btn alt" onclick="mfaCancel()">Batal</button>`;
+  if(!authMode)return `<h3>Selamat datang</h3><small>${msg||'Masuk atau daftar untuk mulai belanja.'}</small><button class="btn" onclick="authMode='masuk';render()">Masuk</button><button class="btn alt" onclick="authMode='daftar';render()">Daftar</button>${savedRows()}`;
   const d=authMode=='daftar';
-  return `<h3>${d?'Daftar':'Masuk'}</h3>${d?'<input id="nm" placeholder="Nama" autocomplete="name">':''}<input id="em" type="email" placeholder="Email" autocomplete="email"><div class="pw"><input id="pw" type="password" placeholder="Password" autocomplete="${d?'new-password':'current-password'}"><button type="button" onclick="togglePw(this)">Lihat</button></div><button class="btn" onclick="${d?'signup':'login'}()">${d?'Daftar':'Masuk'}</button><button class="btn alt" onclick="authMode=null;render()">Kembali</button>`;
+  return `<h3>${d?'Daftar':'Masuk'}</h3>${d?'<input id="nm" placeholder="Nama" autocomplete="name">':''}<input id="em" type="email" placeholder="Email" autocomplete="email"><div class="pw"><input id="pw" type="password" placeholder="Password" autocomplete="${d?'new-password':'current-password'}"><button type="button" onclick="togglePw(this)">Lihat</button></div><button class="btn" onclick="${d?'signup':'login'}()">${d?'Daftar':'Masuk'}</button><button class="btn alt" onclick="authMode=null;adding=false;render()">Kembali</button>`;
 }
 function togglePw(b){const i=$('#pw'),h=i.type=='password';i.type=h?'text':'password';b.textContent=h?'Sembunyi':'Lihat'}
 async function login(){
   const{error}=await SB.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});
   if(error)return toast(error.message);
-  const{data:{session}}=await SB.auth.getSession();authMode=null;await setUser(session.user);await load();render();
+  if(await needMfa()){authMode='mfa';adding=false;render();return}
+  const{data:{session}}=await SB.auth.getSession();authMode=null;adding=false;await setUser(session.user);await load();render();
 }
 async function signup(){
   const name=$('#nm').value.trim();
@@ -146,7 +150,7 @@ async function signup(){
   if(!data.session)return toast('Cek email untuk konfirmasi, lalu masuk.');
   authMode=null;await setUser(data.session.user);await load();render();
 }
-async function logout(){await SB.auth.signOut();await setUser(null);render()}
+async function logout(){if(me)forgetAcct(me.id);await SB.auth.signOut({scope:'local'});await setUser(null);adding=false;render()}
 
 const av=u=>u?.avatar_url?`<img class="av" src="${esc(safeUrl(u.avatar_url))}" alt="">`:`<div class="av">${esc((u?.name||'?').slice(0,1).toUpperCase())}</div>`;
 async function saveName(){
@@ -184,15 +188,16 @@ function chatAdmin(){
   chatTo={b:me.id,s:a.id};go('chat');
 }
 async function openBox(k){
-  const f={cat:catForm,item:itemForm,mine,cats:catsBox,banner:bannerBox,users:usersBox,perm:permBox}[k];
+  const f={cat:catForm,item:itemForm,mine,cats:catsBox,banner:bannerBox,users:usersBox,perm:permBox,mfa:mfaBox}[k];
   modal(await f());
 }
 async function akun(){
-  if(!me)return auth();
+  if(!me||adding)return auth();
   const r=prof?.role||'buyer';
   let h=`<div class="who"><label class="avl" aria-label="Ganti foto profil">${av(prof)}<input type="file" accept="image/*" onchange="upAvatar(this)" hidden></label><div><div class="nm"><h3>${esc(prof?.name||'Pengguna')}</h3><button class="ic" onclick="editName()" aria-label="Ubah nama">${PEN}</button></div><small>${esc(me.email)} · ${esc(r)}</small></div></div>`;
   if(r!='buyer')h+=`<div class="wallet"><small>Dompetku</small><b>${rp(prof?.coins)}</b></div><h4>Penjualan</h4><div class="tiles">${FEATS.filter(f=>r=='admin'||perms.includes(f[0])).map(f=>tile(...f)).join('')}</div>`;
-  if(r=='admin')h+=`<h4>Admin</h4><div class="tiles">${tile('users','Pengguna','Peran, koin, akun')}${tile('perm','Atur peran seller','Pilih fitur seller')}</div>`;
+  if(r=='admin')h+=`<h4>Admin</h4><div class="tiles">${tile('users','Pengguna','Peran, koin, akun')}${tile('perm','Atur peran seller','Pilih fitur seller')}${tile('mfa','Keamanan','Verifikasi 2 langkah')}</div>`;
+  h+=acctList();
   h+=`<h4>Bantuan</h4>`+(r!='admin'?`<div class="row" onclick="chatAdmin()"><div><b>Chat admin</b><small>Tanya atau laporkan masalah</small></div></div>`:'')+`<button class="btn alt" onclick="logout()">Keluar</button>`;
   return h;
 }
@@ -394,6 +399,77 @@ async function coinLog(id){
   const{data}=await SB.from('coin_log').select('*').eq('user_id',id).order('created_at',{ascending:false}).limit(30);
   const u=users.find(x=>x.id==id);
   modal(`<h3>Riwayat koin</h3><small>${esc(u?.name||'')}</small><br>`+((data||[]).map(x=>`<div class="row"><div style="flex:1"><b>${x.change>0?'+':'−'}${rp(Math.abs(x.change))}</b><small>${esc(x.note||'')} · ${new Date(x.created_at).toLocaleString('id-ID')}</small></div></div>`).join('')||empty('Belum ada riwayat.')));
+}
+let adding=false,mfaF='';
+const ACC='wk_accts';
+const accts=()=>{try{return JSON.parse(localStorage.getItem(ACC)||'{}')}catch(e){return{}}};
+const putAccts=o=>{try{localStorage.setItem(ACC,JSON.stringify(o))}catch(e){}};
+function saveAcct(sess){
+  if(!sess?.user)return;
+  const a=accts(),u=sess.user,old=a[u.id]||{},mine=prof&&prof.id==u.id;
+  a[u.id]={...old,email:u.email,at:sess.access_token,rt:sess.refresh_token,name:mine?prof.name:old.name,avatar:mine?prof.avatar_url:old.avatar};
+  putAccts(a);
+}
+function forgetAcct(id){const a=accts();delete a[id];putAccts(a)}
+SB.auth.onAuthStateChange((ev,sess)=>{if(sess&&ev!=='SIGNED_OUT')saveAcct(sess)});
+async function needMfa(){
+  const{data}=await SB.auth.mfa.getAuthenticatorAssuranceLevel();
+  return data?.nextLevel==='aal2'&&data.currentLevel!=='aal2';
+}
+function savedRows(){
+  const a=accts(),ids=Object.keys(a).filter(id=>!me||id!=me.id);
+  if(!ids.length)return '';
+  return `<h4>Akun tersimpan</h4>`+ids.map(id=>`<div class="row" onclick="switchAcct('${id}')">${av({name:a[id].name||a[id].email,avatar_url:a[id].avatar})}<div style="flex:1"><b>${esc(a[id].name||a[id].email)}</b><small>${esc(a[id].email)}</small></div><button class="ic" style="font-size:22px;line-height:1" onclick="event.stopPropagation();forgetAcct('${id}');render()" aria-label="Hapus dari daftar">×</button></div>`).join('');
+}
+const acctList=()=>`${savedRows()?savedRows().replace('Akun tersimpan','Pindah akun'):''}<button class="btn alt" onclick="adding=true;authMode=null;render()">Tambah akun</button>`;
+async function switchAcct(id){
+  const a=accts()[id];if(!a)return;
+  const{data,error}=await SB.auth.setSession({access_token:a.at,refresh_token:a.rt});
+  if(error||!data?.session){forgetAcct(id);toast('Sesi akun habis. Masuk lagi untuk akun ini.');return render()}
+  adding=false;
+  if(await needMfa()){authMode='mfa';await setUser(null);return render()}
+  await setUser(data.session.user);await load();toast('Beralih ke '+(a.name||a.email));render();
+}
+async function mfaLogin(){
+  const{data:f}=await SB.auth.mfa.listFactors();
+  const fac=f?.totp?.[0];if(!fac)return toast('Faktor 2 langkah tidak ditemukan');
+  const{data:c,error:e1}=await SB.auth.mfa.challenge({factorId:fac.id});
+  if(e1)return toast(e1.message);
+  const{error}=await SB.auth.mfa.verify({factorId:fac.id,challengeId:c.id,code:$('#mc').value.trim()});
+  if(error)return toast('Kode salah. Coba lagi.');
+  const{data:{session}}=await SB.auth.getSession();
+  authMode=null;adding=false;await setUser(session.user);await load();render();
+}
+async function mfaCancel(){
+  const{data:{session}}=await SB.auth.getSession();
+  if(session)forgetAcct(session.user.id);
+  await SB.auth.signOut({scope:'local'});authMode=null;adding=false;await setUser(null);render();
+}
+async function mfaBox(){
+  const{data:f}=await SB.auth.mfa.listFactors();
+  const on=(f?.totp||[]).length>0;
+  return `<h3>Verifikasi 2 langkah</h3>`+(on?`<p style="margin:8px 0">Status: <b style="color:var(--cy)">Aktif</b>. Setiap masuk, kamu diminta 6 angka dari aplikasi autentikator.</p><button class="btn" style="${RED}" onclick="mfaOff()">Matikan</button>`:`<small>Pasang aplikasi Google Authenticator atau Authy di HP, lalu tekan Aktifkan.</small><button class="btn" onclick="mfaStart()">Aktifkan</button>`);
+}
+async function mfaStart(){
+  const{data:f}=await SB.auth.mfa.listFactors();
+  for(const x of (f?.all||[]))if(x.status!=='verified')await SB.auth.mfa.unenroll({factorId:x.id});
+  const{data,error}=await SB.auth.mfa.enroll({factorType:'totp',friendlyName:'Wonka '+Date.now()});
+  if(error)return toast(error.message);
+  mfaF=data.id;
+  modal(`<h3>Aktifkan 2 langkah</h3><small>1. Buka aplikasi autentikator, pilih tambah akun. Scan kode QR ini, atau pilih "masukkan kunci setelan" lalu tempel kode rahasia di bawah.</small><img src="${data.totp.qr_code}" alt="Kode QR" style="background:#fff;max-width:220px;margin:10px auto;display:block"><div class="code" style="font-size:14px;letter-spacing:1px;word-break:break-all">${esc(data.totp.secret)}</div><button class="btn alt" onclick="navigator.clipboard.writeText('${esc(data.totp.secret)}').then(()=>toast('Kode rahasia disalin'))">Salin kode rahasia</button><small>2. Masukkan 6 angka yang tampil di aplikasi.</small><input id="mc" inputmode="numeric" maxlength="6" placeholder="6 angka"><button class="btn" onclick="mfaConfirm()">Aktifkan sekarang</button>`);
+}
+async function mfaConfirm(){
+  const{data:c,error:e1}=await SB.auth.mfa.challenge({factorId:mfaF});
+  if(e1)return toast(e1.message);
+  const{error}=await SB.auth.mfa.verify({factorId:mfaF,challengeId:c.id,code:$('#mc').value.trim()});
+  if(error)return toast('Kode salah. Coba lagi.');
+  closeM();toast('Verifikasi 2 langkah aktif');
+}
+async function mfaOff(){
+  if(!confirm('Matikan verifikasi 2 langkah? Akun admin jadi kurang aman.'))return;
+  const{data:f}=await SB.auth.mfa.listFactors();
+  for(const x of (f?.totp||[])){const{error}=await SB.auth.mfa.unenroll({factorId:x.id});if(error)return toast(error.message)}
+  closeM();toast('Verifikasi 2 langkah dimatikan');
 }
 function openChat(sid){
   if(!me){closeM();toast('Masuk dulu untuk chat');return go('akun')}
