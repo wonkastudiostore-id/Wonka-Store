@@ -134,7 +134,7 @@ function auth(msg){
   const d=authMode=='daftar';
   return `<h3>${d?'Daftar':'Masuk'}</h3>${d?'<input id="nm" placeholder="Nama" autocomplete="name">':''}<input id="em" type="email" placeholder="Email" autocomplete="email"><div class="pw"><input id="pw" type="password" placeholder="Password" autocomplete="${d?'new-password':'current-password'}"><button type="button" onclick="togglePw(this)">Lihat</button></div><button class="btn" onclick="${d?'signup':'login'}()">${d?'Daftar':'Masuk'}</button><button class="btn alt" onclick="authMode=null;adding=false;render()">Kembali</button>`;
 }
-function togglePw(b){const i=$('#pw'),h=i.type=='password';i.type=h?'text':'password';b.textContent=h?'Sembunyi':'Lihat'}
+function togglePw(b){const i=b.previousElementSibling,h=i.type=='password';i.type=h?'text':'password';b.textContent=h?'Sembunyi':'Lihat'}
 async function login(){
   const{error}=await SB.auth.signInWithPassword({email:$('#em').value.trim(),password:$('#pw').value});
   if(error)return toast(error.message);
@@ -198,6 +198,7 @@ async function akun(){
   if(r!='buyer')h+=`<div class="wallet"><small>Dompetku</small><b>${rp(prof?.coins)}</b></div><h4>Penjualan</h4><div class="tiles">${FEATS.filter(f=>r=='admin'||perms.includes(f[0])).map(f=>tile(...f)).join('')}</div>`;
   if(r=='admin')h+=`<h4>Admin</h4><div class="tiles">${tile('users','Pengguna','Peran, koin, akun')}${tile('perm','Atur peran seller','Pilih fitur seller')}${tile('mfa','Keamanan','Verifikasi 2 langkah')}</div>`;
   h+=acctList();
+  h+=`<h4>Keamanan</h4><div class="row" onclick="pwBox()"><div><b>Ganti password</b><small>Ubah password akunmu</small></div></div>`;
   h+=`<h4>Bantuan</h4>`+(r!='admin'?`<div class="row" onclick="chatAdmin()"><div><b>Chat admin</b><small>Tanya atau laporkan masalah</small></div></div>`:'')+`<button class="btn alt" onclick="logout()">Keluar</button>`;
   return h;
 }
@@ -470,6 +471,17 @@ async function mfaOff(){
   const{data:f}=await SB.auth.mfa.listFactors();
   for(const x of (f?.totp||[])){const{error}=await SB.auth.mfa.unenroll({factorId:x.id});if(error)return toast(error.message)}
   closeM();toast('Verifikasi 2 langkah dimatikan');
+}
+function pwBox(){
+  modal(`<h3>Ganti password</h3><small>Minimal 8 karakter. Gunakan campuran huruf dan angka.</small><div class="pw"><input id="np" type="password" placeholder="Password baru" autocomplete="new-password"><button type="button" onclick="togglePw(this)">Lihat</button></div><div class="pw"><input id="np2" type="password" placeholder="Ulangi password baru" autocomplete="new-password"><button type="button" onclick="togglePw(this)">Lihat</button></div><button class="btn" onclick="savePw()">Simpan password</button>`);
+}
+async function savePw(){
+  const a=$('#np').value,b=$('#np2').value;
+  if(a.length<8)return toast('Password minimal 8 karakter');
+  if(a!==b)return toast('Konfirmasi password tidak sama');
+  const{error}=await SB.auth.updateUser({password:a});
+  if(error)return toast(/reauth/i.test(error.message)?'Demi keamanan, keluar lalu masuk lagi, kemudian coba ganti password.':/same/i.test(error.message)?'Password baru harus berbeda dari yang lama.':error.message);
+  closeM();toast('Password berhasil diganti');
 }
 function openChat(sid){
   if(!me){closeM();toast('Masuk dulu untuk chat');return go('akun')}
