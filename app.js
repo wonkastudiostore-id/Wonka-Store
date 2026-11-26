@@ -17,18 +17,20 @@ async function setUser(u){
   refreshNotif();refreshChatBadge();
 }
 async function load(){
-  const[c,p,b,si,pm,rt]=await Promise.all([
+  const[c,p,b,si,pm,rt,pr]=await Promise.all([
     SB.from('categories').select('*').order('name'),
     SB.from('products').select('*').eq('active',true).order('sold_count',{ascending:false}),
     SB.from('banners').select('*').eq('active',true).order('sort').order('id'),
     SB.from('seller_info').select('*'),
     SB.from('settings').select('value').eq('key','seller_perms').maybeSingle(),
-    SB.from('seller_rating').select('*')
+    SB.from('seller_rating').select('*'),
+    SB.from('product_rating').select('*')
   ]);
   if(c.error||p.error)toast('Gagal memuat data');
   cats=c.data||[];prods=p.data||[];banners=b.data||[];
   sellers=Object.fromEntries((si.data||[]).map(x=>[x.id,x]));
   ratings=Object.fromEntries((rt.data||[]).map(x=>[x.seller_id,x]));
+  prating=Object.fromEntries((pr.data||[]).map(x=>[x.product_id,x]));
   try{const v=JSON.parse(pm.data?.value);if(Array.isArray(v))perms=v}catch(e){}
 }
 async function init(){
@@ -75,7 +77,7 @@ function home(){
 
 function openP(id){
   const p=prods.find(x=>x.id==id),sl=sellers[p.seller_id];
-  modal(`<img src="${esc(safeUrl(p.image_url))}" alt="" onerror="this.remove()"><h3>${esc(p.name)}</h3><p>${priceH(p)}</p><small>Stok ${p.stock}</small>${p.description?`<p style="margin:10px 0">${esc(p.description)}</p>`:''}${p.seller_id?`<div class="who sel">${av(sl)}<div><b>${esc(sl?.name||'Penjual')}</b><small>Penjual · ${starsH(ratings[p.seller_id])}</small></div></div>`:''}<button class="btn" onclick="buy(${p.id})">Beli sekarang</button>${p.seller_id&&p.seller_id!=me?.id?`<button class="btn alt" onclick="openChat('${p.seller_id}')">Chat penjual</button>`:''}`+manage(p));
+  modal(`<img src="${esc(safeUrl(p.image_url))}" alt="" onerror="this.remove()"><h3>${esc(p.name)}</h3><p>${priceH(p)}</p><small>Stok ${p.stock} · ${starsH(prating[p.id])}</small>${p.description?`<p style="margin:10px 0">${esc(p.description)}</p>`:''}${p.seller_id?`<div class="who sel" style="cursor:pointer" onclick="sellerProfile('${p.seller_id}')">${av(sl)}<div><b>${esc(sl?.name||'Penjual')}</b><small>Penjual · ${starsH(ratings[p.seller_id])}</small></div></div>`:''}<button class="btn" onclick="buy(${p.id})">Beli sekarang</button>${p.seller_id&&p.seller_id!=me?.id?`<button class="btn alt" onclick="openChat('${p.seller_id}')">Chat penjual</button>`:''}`+manage(p));
 }
 async function buy(id){
   if(!me){modal(`<h3>Login diperlukan</h3><p style="margin:8px 0">Untuk membeli, kamu harus masuk jika sudah punya akun. Jika belum punya akun, silakan daftar atau buat akun dulu.</p><button class="btn" onclick="authMode='masuk';go('akun')">Masuk</button><button class="btn alt" onclick="authMode='daftar';go('akun')">Daftar</button>`);return}
@@ -99,6 +101,10 @@ async function trx(){
   const chips=[['all','Semua'],...Object.entries(ST)].map(([k,v])=>`<button class="chip ${tf==k?'on':''}" onclick="tf='${k}';render()">${v}</button>`).join('');
   return `<div class="chips">${chips}</div>`+(l.map(o=>`<div class="row" onclick="openO(${o.id})"><img src="${esc(safeUrl(o.products?.image_url))}" alt="" onerror="this.style.visibility='hidden'"><div><b>${esc(o.products?.name||'Item dihapus')}</b><small>${rp(o.amount)} · ${ST[o.status]||esc(o.status)} · ${o.buyer_id==me.id?'Beli':'Jual'}</small></div></div>`).join('')||empty('Belum ada transaksi di status ini.'));
 }
+function hintO(o,b){
+  const m={pending:b?'Bayar lewat QR, lalu tekan Saya sudah bayar.':'Menunggu pembeli membayar.',sent:b?'Menunggu penjual memastikan uang masuk.':'Pembeli sudah membayar. Cek uangmu, lalu tekan Uang sudah diterima.',paid:b?'Penjual sedang menyiapkan pesananmu.':'Kirim pesanan ke pembeli, lalu tekan Pesanan sudah dikirim.',shipped:b?'Periksa pesananmu, lalu tekan Pesanan diterima.':'Menunggu pembeli menerima pesanan.',done:'Transaksi selesai.'};
+  return m[o.status]||'';
+}
 function openO(id){
   const o=orders.find(x=>x.id==id),buyer=o.buyer_id==me.id,sel=o.seller_id==me.id;
   let b='';
@@ -106,8 +112,8 @@ function openO(id){
   if(sel&&o.status=='sent')b+=`<button class="btn" onclick="confirmO(${o.id})">Uang sudah diterima</button>`;
   if(sel&&o.status=='paid')b+=`<button class="btn" onclick="setSt(${o.id},'shipped')">Pesanan sudah dikirim</button>`;
   if(buyer&&o.status=='shipped')b+=`<button class="btn" onclick="setSt(${o.id},'done')">Pesanan diterima</button>`;
-  if(buyer&&o.status=='done'&&o.seller_id&&!rated.has(o.id))b+=`<button class="btn alt" onclick="rateBox(${o.id})">Beri bintang untuk penjual</button>`;
-  modal(`<h3>Detail transaksi</h3><p>${esc(o.products?.name||'Item dihapus')}</p><p class="pr">${rp(o.amount)}</p><small>${ST[o.status]||esc(o.status)} · ${new Date(o.created_at).toLocaleString('id-ID')}</small>`+b);
+  if(buyer&&o.status=='done'&&o.seller_id&&!rated.has(o.id))b+=`<button class="btn alt" onclick="rateBox(${o.id})">Beri bintang dan ulasan</button>`;
+  modal(`<h3>Detail transaksi</h3><p>${esc(o.products?.name||'Item dihapus')}</p><p class="pr">${rp(o.amount)}</p><small>${ST[o.status]||esc(o.status)} · ${new Date(o.created_at).toLocaleString('id-ID')}</small><p class="mut" style="margin:8px 0">${hintO(o,buyer)}</p>`+b);
 }
 async function setSt(id,st){
   const{error}=await SB.from('orders').update({status:st}).eq('id',id);
@@ -134,6 +140,7 @@ async function login(){
 async function signup(){
   const name=$('#nm').value.trim();
   if(!name)return toast('Nama wajib diisi');
+  if($('#pw').value.length<8)return toast('Password minimal 8 karakter');
   const{data,error}=await SB.auth.signUp({email:$('#em').value.trim(),password:$('#pw').value,options:{data:{name}}});
   if(error)return toast(error.message);
   if(!data.session)return toast('Cek email untuk konfirmasi, lalu masuk.');
@@ -417,14 +424,31 @@ async function drawMsgs(first){
   e.innerHTML=(data||[]).map(m=>{const me_=m.sender_id==me.id;return `<div class="msg ${me_?'me':''}" ${me_?`onclick="msgMenu(${m.id})"`:''}>${m.image_url?`<img class="mimg" src="${esc(safeUrl(m.image_url))}" alt="Gambar" ${me_?'':'onclick="openImg(this.src)"'}>`:''}${esc(m.body)}</div>`}).join('')||empty('Belum ada pesan.');
   if(atEnd)scrollTo(0,document.body.scrollHeight);
 }
-let msgs=[],ratings={},rated=new Set();
+let msgs=[],ratings={},prating={},rated=new Set();
 const starsH=r=>r?`<span style="color:#fbbf24">★ ${Number(r.avg).toFixed(1)}</span> (${r.n})`:'Belum ada penilaian';
-function rateBox(id){modal(`<h3>Beri bintang</h3><small>Seberapa baik penjual ini?</small><div class="stars">${[1,2,3,4,5].map(n=>`<button onclick="rate(${id},${n})" aria-label="${n} bintang">★<small>${n}</small></button>`).join('')}</div>`)}
-async function rate(id,n){
-  const o=orders.find(x=>x.id==id);
-  const{error}=await SB.from('reviews').insert({order_id:id,seller_id:o.seller_id,buyer_id:me.id,stars:n});
+const TPL=['Pengiriman sangat cepat','Penjual responsif','Penjual ramah','Sesuai deskripsi','Harga sepadan','Sangat direkomendasikan'];
+let rv={id:0,stars:0,tpl:[],txt:''};
+function rateBox(id){rv={id,stars:0,tpl:[],txt:''};drawRate()}
+function togTpl(i){const k=rv.tpl.indexOf(i);k<0?rv.tpl.push(i):rv.tpl.splice(k,1);drawRate()}
+function drawRate(){
+  const el=$('#rvt');if(el)rv.txt=el.value;
+  modal(`<h3>Beri penilaian</h3><small>Seberapa baik penjual dan pesananmu?</small><div class="stars">${[1,2,3,4,5].map(n=>`<button onclick="rv.stars=${n};drawRate()" aria-label="${n} bintang" style="${n<=rv.stars?'':'opacity:.35'}">★</button>`).join('')}</div><small>Pilih ulasan cepat</small><div class="chips" style="flex-wrap:wrap;margin-top:6px">${TPL.map((t,i)=>`<button class="chip ${rv.tpl.includes(i)?'on':''}" onclick="togTpl(${i})">${t}</button>`).join('')}</div><input id="rvt" maxlength="200" placeholder="Tulis ulasan (opsional)" value="${esc(rv.txt)}"><button class="btn" onclick="rate()">Kirim penilaian</button>`);
+}
+async function rate(){
+  if(!rv.stars)return toast('Pilih jumlah bintang dulu');
+  const o=orders.find(x=>x.id==rv.id),txt=($('#rvt')?.value||'').trim();
+  const comment=[...rv.tpl.map(i=>TPL[i]),...(txt?[txt]:[])].join(' · ').slice(0,300);
+  const{error}=await SB.from('reviews').insert({order_id:rv.id,seller_id:o.seller_id,buyer_id:me.id,stars:rv.stars,comment:comment||null});
   if(error)return toast(error.message);
   closeM();await load();toast('Terima kasih atas penilaiannya');render();
+}
+const revH=r=>`<div class="row" style="cursor:default"><div style="flex:1"><b><span style="color:#fbbf24">${'★'.repeat(r.stars)}</span><span style="color:var(--mut)">${'★'.repeat(5-r.stars)}</span></b><small>${esc(r.buyer_name||'Pembeli')} · ${new Date(r.created_at).toLocaleDateString('id-ID')}</small>${r.comment?`<p style="margin-top:4px">${esc(r.comment)}</p>`:''}</div></div>`;
+async function sellerProfile(id){
+  const sl=sellers[id];if(!sl)return;
+  const mine=prods.filter(p=>p.seller_id==id),sold=mine.reduce((a,p)=>a+(p.sold_count||0),0);
+  const top=[...mine].sort((a,b)=>(b.sold_count||0)-(a.sold_count||0)).slice(0,6);
+  const{data}=await SB.from('review_public').select('*').eq('seller_id',id).order('created_at',{ascending:false}).limit(10);
+  modal(`<div class="who">${av(sl)}<div><h3>${esc(sl.name||'Penjual')}</h3><small>${starsH(ratings[id])}</small></div></div><div class="tiles" style="margin-top:12px"><div class="wallet" style="margin:0"><small>Terjual</small><b>${sold}</b></div><div class="wallet" style="margin:0"><small>Item dijual</small><b>${mine.length}</b></div></div><h4>Terlaris</h4><div class="scroll">${top.map(card).join('')||empty('Belum ada item.')}</div><h4>Ulasan</h4>`+((data||[]).map(revH).join('')||empty('Belum ada ulasan.')));
 }
 function msgMenu(id){
   const m=msgs.find(x=>x.id==id);if(!m)return;
