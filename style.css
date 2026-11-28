@@ -101,3 +101,15 @@ nav .nb{top:0;right:calc(50% - 26px)}
 .stars{display:flex;gap:6px;margin:14px 0}
 .stars button{flex:1;background:var(--bg);border:1px solid var(--line);border-radius:12px;color:#fbbf24;font-size:26px;padding:8px 0}
 .stars button small{color:var(--mut);font-size:12px}
+#modal.show{align-items:center;padding:16px}
+.sheet{max-width:440px;border:1px solid var(--line);border-radius:20px;animation:pop .18s ease-out}
+@keyframes pop{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}}
+.authwrap{min-height:62vh;display:flex;align-items:center}
+.authbox{width:100%;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px}
+.authbox input{background:var(--bg)}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;margin-bottom:12px}
+.seg button{flex:1;border:0;background:none;color:var(--mut);padding:10px;border-radius:9px;font-weight:600}
+.seg button.on{background:var(--vio);color:#fff}
+.bar{height:10px;border-radius:6px;background:var(--line);overflow:hidden;margin:10px 0 4px}
+.bar i{display:block;height:100%;background:var(--cy)}
