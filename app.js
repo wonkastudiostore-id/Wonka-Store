@@ -130,9 +130,11 @@ async function confirmO(id){
 
 function auth(msg){
   if(authMode=='mfa')return `<h3>Verifikasi 2 langkah</h3><small>Masukkan 6 angka dari aplikasi autentikator di HP.</small><input id="mc" inputmode="numeric" maxlength="6" placeholder="6 angka" autocomplete="one-time-code"><button class="btn" onclick="mfaLogin()">Verifikasi</button><button class="btn alt" onclick="mfaCancel()">Batal</button>`;
+  if(authMode=='lupa')return `<h3>Lupa password</h3><small>Masukkan email akunmu. Kami kirim tautan untuk membuat password baru.</small><input id="em" type="email" placeholder="Email" autocomplete="email"><button class="btn" onclick="sendReset()">Kirim tautan reset</button><button class="btn alt" onclick="authMode='masuk';render()">Kembali</button>`;
+  if(authMode=='reset')return `<h3>Buat password baru</h3><small>Minimal 8 karakter.</small><div class="pw"><input id="np" type="password" placeholder="Password baru" autocomplete="new-password"><button type="button" onclick="togglePw(this)">Lihat</button></div><div class="pw"><input id="np2" type="password" placeholder="Ulangi password baru" autocomplete="new-password"><button type="button" onclick="togglePw(this)">Lihat</button></div><button class="btn" onclick="doReset()">Simpan password</button>`;
   if(!authMode)return `<h3>Selamat datang</h3><small>${msg||'Masuk atau daftar untuk mulai belanja.'}</small><button class="btn" onclick="authMode='masuk';render()">Masuk</button><button class="btn alt" onclick="authMode='daftar';render()">Daftar</button>${savedRows()}`;
   const d=authMode=='daftar';
-  return `<h3>${d?'Daftar':'Masuk'}</h3>${d?'<input id="nm" placeholder="Nama" autocomplete="name">':''}<input id="em" type="email" placeholder="Email" autocomplete="email"><div class="pw"><input id="pw" type="password" placeholder="Password" autocomplete="${d?'new-password':'current-password'}"><button type="button" onclick="togglePw(this)">Lihat</button></div><button class="btn" onclick="${d?'signup':'login'}()">${d?'Daftar':'Masuk'}</button><button class="btn alt" onclick="authMode=null;adding=false;render()">Kembali</button>`;
+  return `<h3>${d?'Daftar':'Masuk'}</h3>${d?'<input id="nm" placeholder="Nama" autocomplete="name">':''}<input id="em" type="email" placeholder="Email" autocomplete="email"><div class="pw"><input id="pw" type="password" placeholder="Password" autocomplete="${d?'new-password':'current-password'}"><button type="button" onclick="togglePw(this)">Lihat</button></div><button class="btn" onclick="${d?'signup':'login'}()">${d?'Daftar':'Masuk'}</button>${d?'':'<button class="btn alt" onclick="authMode=\'lupa\';render()">Lupa password?</button>'}<button class="btn alt" onclick="authMode=null;adding=false;render()">Kembali</button>`;
 }
 function togglePw(b){const i=b.previousElementSibling,h=i.type=='password';i.type=h?'text':'password';b.textContent=h?'Sembunyi':'Lihat'}
 async function login(){
@@ -192,7 +194,7 @@ async function openBox(k){
   modal(await f());
 }
 async function akun(){
-  if(!me||adding)return auth();
+  if(!me||adding||authMode=='reset')return auth();
   const r=prof?.role||'buyer';
   let h=`<div class="who"><label class="avl" aria-label="Ganti foto profil">${av(prof)}<input type="file" accept="image/*" onchange="upAvatar(this)" hidden></label><div><div class="nm"><h3>${esc(prof?.name||'Pengguna')}</h3><button class="ic" onclick="editName()" aria-label="Ubah nama">${PEN}</button></div><small>${esc(me.email)} · ${esc(r)}</small></div></div>`;
   if(r!='buyer')h+=`<div class="wallet"><small>Dompetku</small><b>${rp(prof?.coins)}</b></div><h4>Penjualan</h4><div class="tiles">${FEATS.filter(f=>r=='admin'||perms.includes(f[0])).map(f=>tile(...f)).join('')}</div>`;
@@ -412,7 +414,7 @@ function saveAcct(sess){
   putAccts(a);
 }
 function forgetAcct(id){const a=accts();delete a[id];putAccts(a)}
-SB.auth.onAuthStateChange((ev,sess)=>{if(sess&&ev!=='SIGNED_OUT')saveAcct(sess)});
+SB.auth.onAuthStateChange((ev,sess)=>{if(ev==='PASSWORD_RECOVERY'){authMode='reset';tab='akun';adding=false;setTimeout(render,0)}if(sess&&ev!=='SIGNED_OUT')saveAcct(sess)});
 async function needMfa(){
   const{data}=await SB.auth.mfa.getAuthenticatorAssuranceLevel();
   return data?.nextLevel==='aal2'&&data.currentLevel!=='aal2';
@@ -471,6 +473,23 @@ async function mfaOff(){
   const{data:f}=await SB.auth.mfa.listFactors();
   for(const x of (f?.totp||[])){const{error}=await SB.auth.mfa.unenroll({factorId:x.id});if(error)return toast(error.message)}
   closeM();toast('Verifikasi 2 langkah dimatikan');
+}
+async function sendReset(){
+  const em=$('#em').value.trim();if(!em)return toast('Isi email dulu');
+  const{error}=await SB.auth.resetPasswordForEmail(em,{redirectTo:location.origin+'/'});
+  if(error)return toast(error.message);
+  authMode='masuk';toast('Jika email terdaftar, tautan reset sudah dikirim. Cek inbox dan folder spam.');render();
+}
+async function doReset(){
+  const a=$('#np').value,b=$('#np2').value;
+  if(a.length<8)return toast('Password minimal 8 karakter');
+  if(a!==b)return toast('Konfirmasi password tidak sama');
+  const{error}=await SB.auth.updateUser({password:a});
+  if(error)return toast(/session/i.test(error.message)?'Tautan sudah kedaluwarsa. Minta tautan reset baru.':error.message);
+  history.replaceState(null,'',location.pathname);
+  authMode=null;
+  const{data:{session}}=await SB.auth.getSession();
+  await setUser(session?.user);await load();toast('Password berhasil diganti');render();
 }
 function pwBox(){
   modal(`<h3>Ganti password</h3><small>Minimal 8 karakter. Gunakan campuran huruf dan angka.</small><div class="pw"><input id="np" type="password" placeholder="Password baru" autocomplete="new-password"><button type="button" onclick="togglePw(this)">Lihat</button></div><div class="pw"><input id="np2" type="password" placeholder="Ulangi password baru" autocomplete="new-password"><button type="button" onclick="togglePw(this)">Lihat</button></div><button class="btn" onclick="savePw()">Simpan password</button>`);
